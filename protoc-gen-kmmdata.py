@@ -50,7 +50,12 @@ class KtDataGenerator(Generator):
                      field: FieldDescriptorProto,
                      indentationLevel: int) -> list[str]:
         typeName = self.getTypeName(field.type, field.type_name)
-        if len(field.default_value) != 0:
+        if field.label == FieldDescriptorProto.LABEL_REPEATED:
+            if typeName.endswith("?"):
+                typeName = typeName[:-1]
+            typeName = "List<%s>" % typeName
+            default = "emptyList()"
+        elif len(field.default_value) != 0:
             default = field.default_value
             if typeName == "String":
                 default = '"' + default + '"'
@@ -59,11 +64,14 @@ class KtDataGenerator(Generator):
         elif typeName == "Boolean":
             default = "False"
         elif typeName in ["Int", "Long", "Float", "Double"]:
-            default = 0
+            default = "0"
+        elif typeName == "ByteArray":
+            default = "ByteArray(size = 0)"
         elif field.type == FieldDescriptorProto.TYPE_ENUM:
             default = typeName + " from 0"
         else:
             default = "null"
+
         indent = "     " * indentationLevel
         return [indent + "val %s: %s = %s," % (field.name, typeName, default)]
 

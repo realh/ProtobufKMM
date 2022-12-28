@@ -14,8 +14,8 @@ class Generator:
     ''' A Generator loads a .proto file and generates some source code from it.
         It must be overridden to provide ?? methods. '''
     def __init__(self, baseName: str):
-        ''' baseName is the base name of the plugin eg protoc-gen-ktdata has a
-            base name of "ktdata". '''
+        ''' baseName is the base name of the plugin eg protoc-gen-kmm-data has a
+            base name of "kmm-data". '''
         self.baseName = baseName
         self.log = log.getLogger("protoc-gen-" + baseName)
         self.log.debug("sys.argv = %s" % str(sys.argv))

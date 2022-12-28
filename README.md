@@ -22,14 +22,14 @@ It's very simple, you just need python3 and the protobuf package, which is
 available with pip or most package managers. Rather than install anything you
 can just put simple wrapper scripts in your PATH, for example:
 
-### protoc-gen-kmmdata
+### protoc-gen-kmm-data
 ```
 #!/bin/sh
-exec /usr/bin/env python3 "$HOME/Code/ProtobufKMM/protoc-gen-kmmdata.py" "$@"
+exec /usr/bin/env python3 "$HOME/Code/ProtobufKMM/protoc-gen-kmm-data.py" "$@"
 ```
 and invoke with:
 ```
-protoc --kmmdata_out=/some/path /path/to/some_protobuf_file.proto
+protoc --kmm-data_out=/some/path /path/to/some_protobuf_file.proto
 ```
 
 The bad news is that the first time you create any Swift files you will have
@@ -37,7 +37,7 @@ to manually add them to your XCode project by dragging them from Finder.
 
 ## The protoc plugins
 
-### protoc-gen-kmmdata
+### protoc-gen-kmm-data
 
 Generates Kotlin data classes and enum classes for the protobuf messages and
 enums. Designed to be used in your shared module with minimum fuss. The output
@@ -49,19 +49,19 @@ The enum and data classes are all wrapped in an object called
 version of the name of your protocol file as given in its `package` directive.
 This is to help avoid name clashes when they're imported into Swift.
 
-### protoc-gen-kmmjvmconv (TODO)
+### protoc-gen-kmm-jvm-conv (TODO)
 
 Will generate Kotlin class extensions in the Android module which convert the
 simple data classes and enums from the kmmdata plugin to and from their
 Kotlin/JVM counterparts.
 
-### protoc-gen-kmmswiftconv (TODO)
+### protoc-gen-kmm-swift-conv (TODO)
 
 Will generate Swift class extensions in the Swift module which convert the
 simple data classes and enums from the kmmdata plugin to and from their Swift
 counterparts.
 
-### protoc-gen-kmmgrpc (TODO)
+### protoc-gen-kmm-grpc (TODO)
 
 Will generate:
 

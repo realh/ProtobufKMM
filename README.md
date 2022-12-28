@@ -37,7 +37,7 @@ to manually add them to your XCode project by dragging them from Finder.
 
 ## The protoc plugins
 
-### protoc-gen-kmmdata (WIP)
+### protoc-gen-kmmdata
 
 Generates Kotlin data classes and enum classes for the protobuf messages and
 enums. Designed to be used in your shared module with minimum fuss. The output

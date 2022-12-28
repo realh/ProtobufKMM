@@ -42,8 +42,10 @@ to manually add them to your XCode project by dragging them from Finder.
 Generates Kotlin data classes and enum classes for the protobuf messages and
 enums. Designed to be used in your shared module with minimum fuss.
 
-This plugin is mostly complete but needs to be modified to add a Java package
-to its output path.
+The enum and data classes are all wrapped in an object called
+`YourProtoPackageProtoData` where `YourProtoPackage` is the capitalised
+version of the name of your protocol file as given in its `package` directive.
+This is to help avoid name clashes when they're imported into Swift.
 
 ### protoc-gen-kmmjvmconv (TODO)
 

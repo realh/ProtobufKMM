@@ -230,4 +230,4 @@ class Generator:
     # to provide them with a namespace to help avoid clashes when accessed
     # from Swift. This returns a suitable name for it.
     def getNamespace(self, protoFile: FileDescriptorProto) -> str:
-        return self.typeNameCase(protoFile.package) + "ProtoKMMData"
+        return self.typeNameCase(protoFile.package) + "ProtoData"

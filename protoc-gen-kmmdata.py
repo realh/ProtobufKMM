@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 
 from google.protobuf.descriptor_pb2 import \
-    EnumDescriptorProto, DescriptorProto, FieldDescriptorProto
+    FileDescriptorProto, \
+    EnumDescriptorProto, DescriptorProto, \
+    FieldDescriptorProto
 
 from generator import Generator
 
@@ -11,7 +13,7 @@ class KtDataGenerator(Generator):
 
     def processEnum(self, enum: EnumDescriptorProto,
                     indentationLevel: int) -> list[str]:
-        indent = "     " * indentationLevel
+        indent = "    " * indentationLevel
         lines = [indent + \
                 "enum class %s(val value: Int) {" % \
                 self.typeNameCase(enum.name)]
@@ -44,7 +46,7 @@ class KtDataGenerator(Generator):
     def messageClosing(self, msg: DescriptorProto,
                        name: str,
                        indentationLevel: int) -> list[str]:
-        return "    " * indentationLevel + ")"
+        return ["    " * indentationLevel + ")"]
 
     def processField(self, msg: DescriptorProto,
                      field: FieldDescriptorProto,
@@ -72,8 +74,21 @@ class KtDataGenerator(Generator):
         else:
             default = "null"
 
-        indent = "     " * indentationLevel
+        indent = "    " * indentationLevel
         return [indent + "val %s: %s = %s," % (field.name, typeName, default)]
+
+    def getHeader(self, protoFile: FileDescriptorProto) -> list[str]:
+        return [
+            "package " + self.options["java_package"],
+            "",
+            "object " + self.getNamespace(protoFile) + " {"
+        ]
+    
+    def getFooter(self, protoFile: FileDescriptorProto) -> list[str]:
+        return ["}"]
+    
+    def getTopLevelIndentation(self, protoFile: FileDescriptorProto) -> int:
+        return 1
 
 
 def main():

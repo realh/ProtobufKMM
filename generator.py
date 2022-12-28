@@ -4,7 +4,8 @@ import sys
 from google.protobuf.compiler.plugin_pb2 import \
     CodeGeneratorRequest, CodeGeneratorResponse
 from google.protobuf.descriptor_pb2 import \
-    FileDescriptorProto, EnumDescriptorProto, DescriptorProto, \
+    FileDescriptorProto, \
+    EnumDescriptorProto, DescriptorProto, \
     FieldDescriptorProto
 
 import log
@@ -90,14 +91,28 @@ class Generator:
 
     # Generates the content for an output file as a string.
     def getContent(self, protoFile: FileDescriptorProto) -> str:
-        lines = []
+        lines = self.getHeader(protoFile)
+        indentationLevel = self.getTopLevelIndentation(protoFile)
         for enum in protoFile.enum_type:
-            lines.extend(self.processEnum(enum, indentationLevel=0))
+            lines.extend(self.processEnum(enum, indentationLevel))
             lines.append("")
         for msg in protoFile.message_type:
-            lines.extend(self.processMessage(msg, indentationLevel=0))
+            lines.extend(self.processMessage(msg, indentationLevel))
             lines.append("")
+        lines.extend(self.getFooter(protoFile))
         return "\n".join(lines) + "\n"
+    
+    # Gets the first few lines to start the output file.
+    def getHeader(self, protoFile: FileDescriptorProto) -> list[str]:
+        return []
+    
+    # Gets the last few lines to add to the end of the output file.
+    def getFooter(self, protoFile: FileDescriptorProto) -> list[str]:
+        return []
+    
+    # Gets the indentation to use for the top-level classes.
+    def getTopLevelIndentation(self, protoFile: FileDescriptorProto) -> int:
+        return 0
     
     # Returns a list of strings (one per line) for an enum definition.
     # Each line is indented by an additional number of spaces multiplied by
@@ -210,3 +225,9 @@ class Generator:
         elements = list(e.capitalize() for e in elements)
         elements[0] = elements[0][0].lower() + elements[0][1:]
         return "".join(elements)
+
+    # The Kotlin message and enum classes should be members of an object
+    # to provide them with a namespace to help avoid clashes when accessed
+    # from Swift. This returns a suitable name for it.
+    def getNamespace(self, protoFile: FileDescriptorProto) -> str:
+        return self.typeNameCase(protoFile.package) + "ProtoKMMData"

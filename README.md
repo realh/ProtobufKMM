@@ -40,7 +40,9 @@ to manually add them to your XCode project by dragging them from Finder.
 ### protoc-gen-kmmdata (WIP)
 
 Generates Kotlin data classes and enum classes for the protobuf messages and
-enums. Designed to be used in your shared module with minimum fuss.
+enums. Designed to be used in your shared module with minimum fuss. The output
+file has the same Java/Kotlin package as the JVM implementation, read from the
+proto file's `java_package` option.
 
 The enum and data classes are all wrapped in an object called
 `YourProtoPackageProtoData` where `YourProtoPackage` is the capitalised

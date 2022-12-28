@@ -76,6 +76,20 @@ Will generate:
 
 * A Swift class to act as the delegate for the above.
 
+## Limitations
+
+This set of plugins was written to support a specific app, which needs to be
+completed ASAP. I don't have time to work on protobuf features it doesn't use,
+which include:
+
+* Nested messages and enums.
+* Includes.
+* Extensions.
+
+So these plugins will generate incorrect code for them. However, this code is
+sufficiently simple and well-documented that I think a third party wouldn't
+find it too difficult to add those features if they need them.
+
 ## Licence
 
 ISC. See [LICENSE](LICENSE).

@@ -12,7 +12,7 @@ import log
 
 class Generator:
     ''' A Generator loads a .proto file and generates some source code from it.
-        It must be overridden to provide ?? methods. '''
+        It must be overridden to provide certain methods. '''
     def __init__(self, baseName: str):
         ''' baseName is the base name of the plugin eg protoc-gen-kmm-data has a
             base name of "kmm-data". '''

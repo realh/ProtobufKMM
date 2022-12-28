@@ -67,9 +67,15 @@ class KtDataGenerator(Generator):
         elif typeName == "String":
             default = '""'
         elif typeName == "Boolean":
-            default = "False"
-        elif typeName in ["Int", "Long", "Float", "Double"]:
+            default = "false"
+        elif typeName == "Int":
             default = "0"
+        elif typeName == "Long":
+            default = "0L"
+        elif typeName == "Double":
+            default = "0.0"
+        elif typeName == "Float":
+            default = "0.0F"
         elif typeName == "ByteArray":
             default = "ByteArray(size = 0)"
         elif field.type == FieldDescriptorProto.TYPE_ENUM:

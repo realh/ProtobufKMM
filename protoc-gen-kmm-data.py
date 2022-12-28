@@ -10,6 +10,9 @@ from generator import Generator
 class KtDataGenerator(Generator):
     def __init__(self):
         super().__init__(baseName="kmm-data")
+    
+    def getOutputFileName(self, protoFileName: str, packageName: str) -> str:
+        return self.typeNameCase(packageName) + "Data.kt"
 
     def processEnum(self, enum: EnumDescriptorProto,
                     indentationLevel: int) -> list[str]:

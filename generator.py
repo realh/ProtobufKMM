@@ -175,6 +175,24 @@ class Generator:
             return n
         return self.convertTypeName(typeName) + "?"
     
+    def typeIsBuiltIn(self, number: int, typeName: str | None) -> bool:
+        ''' Works out whether the type of a field is built-in/primitive. '''
+        if number == FieldDescriptorProto.TYPE_MESSAGE:
+            return False
+        elif number == FieldDescriptorProto.TYPE_ENUM:
+            return False
+        elif number != 0:
+            n = self.getBuiltInTypeByNumber(number)
+            if n is not None:
+                return True
+        if typeName is None:
+            # This would be Any?, so it shouldn't be converted
+            return True
+        n = self.getBuiltInTypeByName(typeName)
+        if n is not None:
+            return True
+        return False
+    
     def convertTypeName(self, name: str) -> str:
         ''' Strips any leading qualifier (includes aren't currently supported).
             and applies self.typeNameCase. '''

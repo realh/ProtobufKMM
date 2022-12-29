@@ -6,7 +6,8 @@ from google.protobuf.compiler.plugin_pb2 import \
 from google.protobuf.descriptor_pb2 import \
     FileDescriptorProto, \
     EnumDescriptorProto, DescriptorProto, \
-    FieldDescriptorProto
+    FieldDescriptorProto, \
+    ServiceDescriptorProto, MethodDescriptorProto
 
 import log
 
@@ -107,6 +108,11 @@ class Generator:
             if len(m) > 0:
                 lines.extend(m)
                 lines.append("")
+        for serv in protoFile.service:
+            s = self.processService(protoFile, serv, indentationLevel)
+            if len(s) > 0:
+                lines.extend(s)
+                lines.append("")
         lines.extend(self.getFooter(protoFile))
         return "\n".join(lines) + "\n"
     
@@ -157,7 +163,97 @@ class Generator:
         ''' Processes a field of a message. '''
         raise NotImplementedError("processField not overridden in %s",
                 self.baseName)
+    
+    def processService(self, protoFile: FileDescriptorProto,
+                       serv: ServiceDescriptorProto,
+                       indentationLevel: int) -> list[str]:
+        ''' Processes a grpc service. '''
+        lines = self.getServiceHeader(protoFile, serv, indentationLevel)
+        for method in serv.method:
+            lines.extend(self.getServiceMethod(protoFile,
+                                               serv,
+                                               method,
+                                               indentationLevel))
+        lines.extend(self.getServiceFooter(protoFile, serv, indentationLevel))
+        return lines
 
+    def getServiceHeader(self, protoFile: FileDescriptorProto,
+                         serv: ServiceDescriptorProto,
+                         indentationLevel: int) -> list[str]:
+        ''' Override to provide the start of a service definition eg a class.
+        '''
+        return []
+    
+    def getServiceName(self, protoFile: FileDescriptorProto,
+                         serv: ServiceDescriptorProto) -> str:
+        packageName = self.typeNameCase(protoFile.package)
+        serviceName = self.typeNameCase(serv.name)
+        if len(protoFile.service) == 1 and packageName == serviceName:
+            return serviceName
+        else:
+            return packageName + serviceName
+
+    def getServiceFooter(self, protoFile: FileDescriptorProto,
+                         serv: ServiceDescriptorProto,
+                         indentationLevel: int) -> list[str]:
+        ''' Override to provide the end of a service definition eg a closing
+            brace. '''
+        return []
+
+    def getServiceMethod(self, protoFile: FileDescriptorProto,
+                        serv: ServiceDescriptorProto,
+                        method: MethodDescriptorProto,
+                        indentationLevel: int) -> list[str]:
+        ''' Override to provide a method definition. It can simply forward
+            to getMethodSignature for an interface.
+        '''
+        return []
+
+    def getMethodSignature(self, protoFile: FileDescriptorProto,
+                           serv: ServiceDescriptorProto,
+                           method: MethodDescriptorProto,
+                           indentationLevel: int) -> list[str]:
+        ''' Gets a method signature (without opening brace). '''
+        indent = "    " * indentationLevel
+        # Server streaming methods don't need to be suspending
+        if method.server_streaming:
+            suspend = ""
+        else:
+            suspend = self.getSuspendKeyword()
+        inputType = self.getNamespace(protoFile) + "." + \
+            self.convertTypeName(method.input_type)
+        if method.client_streaming:
+            inputType = "Flow<%s>" % inputType
+        ret = self.getReturn(protoFile, method)
+        return ["%s%s%s%s(" % (indent,
+                               suspend,
+                               self.getFuncKeyword(),
+                               self.memberCase(method.name)
+                               ),
+                "%s    request: %s%s" % (indent, inputType, ret[0]),
+                indent + ret[1],
+               ]
+    
+    def getReturn(self, protoFile: FileDescriptorProto,
+                  method: MethodDescriptorProto) -> list[str]:
+        ''' Gets a return clause for a method. The first line should be
+            concatenated to the parameters. For Kotlin this is a comma.
+            The second line contains the closing brace and return type.
+            For Swift use getCallbackParameter instead (TODO).  '''
+        typeName = self.getNamespace(protoFile) + "." + \
+            self.convertTypeName(method.output_type)
+        if method.server_streaming:
+            typeName = "Flow<%s>" % typeName
+        return [",", "): " + typeName]
+    
+    def getFuncKeyword(self) -> str:
+        ''' Gets the keyword for a function in the target language. '''
+        return "fun "
+
+    def getSuspendKeyword(self) -> str:
+        ''' This is only useful for Kotlin, Swift should return "". '''
+        return "suspend "
+    
     def getTypeName(self, number: int, typeName: str | None) -> str:
         ''' Gets the typename in the target language (here, Kotlin). '''
         if number == FieldDescriptorProto.TYPE_MESSAGE:

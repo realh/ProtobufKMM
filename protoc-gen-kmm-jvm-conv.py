@@ -86,19 +86,19 @@ class FromJVMGenerator(Generator):
         typeName = self.getTypeName(field.type, field.type_name)
         if typeName.endswith("?"):
             typeName = typeName[:-1]
-            optional = True
+            optional = "OrNull"
         else:
-            optional = False
+            optional = ""
         builtIn = self.typeIsBuiltIn(field.type, field.type_name)
         isList = field.label == FieldDescriptorProto.LABEL_REPEATED
         if isList and not builtIn:
-            expr = "proto.%s.map { %s.%s.fromProto(it) }" % \
+            expr = "proto.%sList.map { %s.%s.fromProto(it) }" % \
                 (fieldName, self.namespace, typeName)
         elif builtIn:
             expr = "proto.%s" % fieldName
         else:
-            expr = "%s.%s.fromProto(proto?.%sOrNull)" % \
-                (self.namespace, typeName, fieldName)
+            expr = "%s.%s.fromProto(proto.%s%s)" % \
+                (self.namespace, typeName, fieldName, optional)
         return ["        %s = %s," % (fieldName, expr)]
 
 
@@ -121,7 +121,7 @@ class JvmConvGenerator(Generator):
                     indentationLevel: int) -> list[str]:
         typeName = self.typeNameCase(enum.name)
         lines = [
-            "fun %s.%s.fromProto(" % (self.namespace, typeName),
+            "fun %s.%s.Companion.fromProto(" % (self.namespace, typeName),
             "    proto: %s," % typeName,
             "): %s.%s {" % (self.namespace, typeName),
             "    return %s.%s from proto.number" % (self.namespace, typeName),

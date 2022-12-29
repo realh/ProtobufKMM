@@ -49,7 +49,12 @@ class KtDataGenerator(Generator):
     def messageClosing(self, msg: DescriptorProto,
                        name: str,
                        indentationLevel: int) -> list[str]:
-        return ["    " * indentationLevel + ")"]
+        indent = "    " * indentationLevel
+        return [
+            indent + ") {",
+            indent + "    companion object {}",
+            indent + "}",
+        ]
 
     def processField(self, msg: DescriptorProto,
                      field: FieldDescriptorProto,
@@ -84,7 +89,8 @@ class KtDataGenerator(Generator):
             default = "null"
 
         indent = "    " * indentationLevel
-        return [indent + "val %s: %s = %s," % (field.name, typeName, default)]
+        propName = self.memberCase(field.name)
+        return [indent + "val %s: %s = %s," % (propName, typeName, default)]
 
     def getHeader(self, protoFile: FileDescriptorProto) -> list[str]:
         return [

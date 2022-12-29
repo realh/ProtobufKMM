@@ -11,7 +11,7 @@ class ToJVMGenerator(Generator):
     ''' A helper class which makes it possible for the main generator to make
         two passes on each message using the super processMessage(); this
         handles the pass for converting the KMM data classes to their JVM
-        implementations, using extensions on the JVM classes. '''
+        implementations, using extensions on the data classes. '''
     def __init__(self, namespace: str, options: dict[str, str]):
         super().__init__(baseName="kmm-jvm-conv")
         self.namespace = namespace
@@ -22,9 +22,10 @@ class ToJVMGenerator(Generator):
         typeName = self.typeNameCase(name)
         camelName = self.memberCase(name)   # DSL builder
         return [
-            "fun %s.Companion.fromData(data: %s.%s): %s {" % \
-                    (typeName, self.namespace, typeName, typeName),
-            "    return %s {" % camelName
+            "fun %s.%s.toProto(): %s {" % \
+                    (self.namespace, typeName, typeName),
+            "    val data = this",
+            "    return %s {" % camelName,
         ]
     
     def messageClosing(self, msg: DescriptorProto,
@@ -39,27 +40,24 @@ class ToJVMGenerator(Generator):
         builtIn = self.typeIsBuiltIn(field.type, field.type_name)
         isList = field.label == FieldDescriptorProto.LABEL_REPEATED
         if isList and not builtIn:
-            convOpen = ""
-            convClose = ".map { it.fromData() }"
+            conv = ".map { it.toProto() }"
         elif builtIn:
-            convOpen = ""
-            convClose = ""
+            conv = ""
         else:
-            convOpen = "%s.fromData(" % typeName
-            convClose = ")"
+            conv = ".toProto()"
         if not isList and typeName.endswith("?"):
-            return ["        data.%s?.let { this.%s = %sit%s }" % \
-                (fieldName, fieldName, convOpen, convClose)]
+            return ["        data.%s?.let { this.%s = it%s }" % \
+                (fieldName, fieldName, conv)]
         else:
-            return ["        this.%s = %sdata.%s%s" % \
-                (fieldName, convOpen, fieldName, convClose)]
+            return ["        this.%s = data.%s%s" % \
+                (fieldName, fieldName, conv)]
 
 
 class FromJVMGenerator(Generator):
     ''' A helper class which makes it possible for the main generator to make
         two passes on each message using the super processMessage(); this
-        handles the pass for adding extensions to the JVM implementations to
-        convert them to the data classes. '''
+        handles the pass for adding extensions to the data class companions to
+        convert them from their JVM counterparts. '''
     def __init__(self, namespace: str, options: dict[str, str]):
         super().__init__(baseName="kmm-jvm-conv")
         self.namespace = namespace
@@ -69,8 +67,11 @@ class FromJVMGenerator(Generator):
                        name: str, indentationLevel: int) -> list[str]:
         typeName = self.typeNameCase(name)
         return [
-            "fun %s.toData(): %s.%s {" % \
-                    (typeName, self.namespace, typeName),
+            "fun %s.%s.Companion.fromProto(" % \
+                    (self.namespace, typeName),
+            "    proto: %s?" % typeName,
+            "): %s.%s? {" % (self.namespace, typeName),
+            "    if (proto == null) return null",
             "    return %s.%s(" % (self.namespace, typeName)
         ]
     
@@ -83,23 +84,22 @@ class FromJVMGenerator(Generator):
                      indentationLevel: int) -> list[str]:
         fieldName = self.memberCase(field.name)
         typeName = self.getTypeName(field.type, field.type_name)
+        if typeName.endswith("?"):
+            typeName = typeName[:-1]
+            optional = True
+        else:
+            optional = False
         builtIn = self.typeIsBuiltIn(field.type, field.type_name)
         isList = field.label == FieldDescriptorProto.LABEL_REPEATED
         if isList and not builtIn:
-            conv = "map { it.toData() }"
+            expr = "proto.%s.map { %s.%s.fromProto(it) }" % \
+                (fieldName, self.namespace, typeName)
         elif builtIn:
-            conv = ""
+            expr = "proto.%s" % fieldName
         else:
-            conv = ".toData()"
-        orNull = "OrNull"
-        if not isList and typeName.endswith("?"):
-            orNull = "OrNull"
-            if len(conv) > 0:
-                conv = "?" + conv
-        else:
-            orNull = ""
-        return ["        %s = this.%s%s%s" % \
-            (fieldName, fieldName, orNull, conv)]
+            expr = "%s.%s.fromProto(proto?.%sOrNull)" % \
+                (self.namespace, typeName, fieldName)
+        return ["        %s = %s," % (fieldName, expr)]
 
 
 class JvmConvGenerator(Generator):
@@ -121,14 +121,15 @@ class JvmConvGenerator(Generator):
                     indentationLevel: int) -> list[str]:
         typeName = self.typeNameCase(enum.name)
         lines = [
-            "fun %s.Companion.fromData(data: %s.%s) {" % \
-                    (typeName, self.namespace, typeName),
-            "    return %s.forValue(data.value)" % typeName,
+            "fun %s.%s.fromProto(" % (self.namespace, typeName),
+            "    proto: %s," % typeName,
+            "): %s.%s {" % (self.namespace, typeName),
+            "    return %s.%s from proto.number" % (self.namespace, typeName),
             "}",
             "",
-            "fun %s.toData(): %s.%s {" % \
-                    (typeName, self.namespace, typeName),
-            "    return %s.%s from this.value" % (self.namespace, typeName),
+            "fun %s.%s.toProto(): %s {" % \
+                    (self.namespace, typeName, typeName),
+            "    return %s.forNumber(this.value)" % typeName,
             "}"
         ]
         return lines

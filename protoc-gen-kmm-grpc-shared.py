@@ -25,7 +25,9 @@ class KMMGrpcSharedGenerator(Generator):
     def getHeader(self, protoFile: FileDescriptorProto) -> list[str]:
         return [
             "package " + self.options["java_package"],
-            ""
+            "",
+            "import kotlinx.coroutines.flow.Flow",
+            "",
         ]
     
     def getFooter(self, protoFile: FileDescriptorProto) -> list[str]:
@@ -39,7 +41,7 @@ class KMMGrpcSharedGenerator(Generator):
                          indentationLevel: int) -> list[str]:
         serviceName = self.getServiceName(protoFile, serv)
         return [
-            "class %sGrpcClient {" % serviceName
+            "interface %sGrpcClient {" % serviceName
         ]
 
     def getServiceFooter(self, protoFile: FileDescriptorProto,

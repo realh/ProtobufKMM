@@ -50,11 +50,7 @@ class KtDataGenerator(Generator):
                        name: str,
                        indentationLevel: int) -> list[str]:
         indent = "    " * indentationLevel
-        return [
-            indent + ") {",
-            indent + "    companion object {}",
-            indent + "}",
-        ]
+        return [ indent + ")" ]
 
     def processField(self, msg: DescriptorProto,
                      field: FieldDescriptorProto,

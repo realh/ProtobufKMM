@@ -71,14 +71,17 @@ their Swift counterparts.
 
 Generates an interface for each service in the shared module which encapsulates
 all the rpc methods in the proto file, using suspend functions, Flows and the
-kmm-data types. Each interface is named `YourProtoPackageServiceName`; if
-there is only one service and it has the same name as the package, the name
-is shortened to `ServiceName`. The filename is `YourProtoPackageGrpcClient.kt`.
+kmm-data types. Each interface is named `YourProtoPackageServiceNameGrpcClient`;
+if there is only one service and it has the same name as the package, the name
+is shortened to `ServiceNameGrpcClient`. The filename is
+`YourProtoPackageGrpcClient.kt`.
 
-### protoc-gen-kmm-grpc-android (TODO)
+### protoc-gen-kmm-grpc-android
 
-Will generate classes in the Android module implementing the above interfaces,
-converting the data types to and from the JVM implementation counterparts.
+Generates classes in the Android module implementing the above GrpClient
+interfaces, converting the data types to and from the JVM implementation
+counterparts. Where entity names have a suffix of `GrpcClient` above, the
+Android implementations have a suffix of `AndroidGrpcClient`.
 
 ### protoc-gen-kmm-grpc-ios (TODO)
 

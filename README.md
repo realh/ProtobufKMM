@@ -75,6 +75,8 @@ If your project's shared module is not called `shared`, its name must be passed
 as an option in the protoc invocation, eg
 `--kmm-swift-conv_opt=shared_module='MySharedModuleName'`.
 
+The output filename is `YourProtoPackageConverters.swift`.
+
 ### protoc-gen-kmm-grpc-shared
 
 Generates an interface for each service in the shared module which encapsulates
@@ -94,7 +96,7 @@ Android implementations have a suffix of `AndroidGrpcClient`.
 ### protoc-gen-kmm-grpc-ios (TODO)
 
 Will generate classes in the `iosMain` part of the shared module, implementing
-the above interface, They will use Swift delegates and callbacks to interface
+the above interface. They will use Swift delegates and callbacks to interface
 between Kotlin and grpc-swift.
 
 ### protoc-gen-kmm-grpc-swift (TODO)

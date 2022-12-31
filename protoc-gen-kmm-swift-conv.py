@@ -1,0 +1,255 @@
+#!/usr/bin/env python3
+
+from google.protobuf.descriptor_pb2 import \
+    FileDescriptorProto, \
+    EnumDescriptorProto, DescriptorProto, \
+    FieldDescriptorProto
+
+from generator import Generator
+
+class ToSwiftGenerator(Generator):
+    ''' A helper class which makes it possible for the main generator to make
+        two passes on each message using the super processMessage(); this
+        handles the pass for converting the KMM data classes to their Swift
+        implementations, using extensions on the Swift classes. '''
+    def __init__(self, namespace: str, options: dict[str, str],
+                 knownTypes: list[str | None],
+                 knownTypesByName: dict[str, str]):
+        super().__init__(baseName="kmm-swift-conv")
+        self.namespace = namespace
+        self.options = options
+        self.knownTypes = knownTypes
+        self.knownTypesByName = knownTypesByName
+    
+    def messageOpening(self, msg: DescriptorProto,
+                       name: str, indentationLevel: int) -> list[str]:
+        typeName = self.typeNameCase(name)
+        if typeName.endswith("?"): typeName = typeName[:-1]
+        swiftName = "Angel_" + typeName
+        dataName = "%s.%s" % (self.namespace, typeName)
+        indent = "    " * indentationLevel
+        return [
+            indent + "static func from(data: %s) -> %s {" % \
+                (dataName, swiftName),
+            indent + "    return %s.with {" % swiftName,
+        ]
+    
+    def messageClosing(self, msg: DescriptorProto,
+                       name: str, indentationLevel: int) -> list[str]:
+        indent = "    " * indentationLevel
+        return [indent + "    }", indent + "}"]
+
+    def processField(self, msg: DescriptorProto,
+                     field: FieldDescriptorProto,
+                     indentationLevel: int) -> list[str]:
+        indentationLevel += 1
+        ktFieldName = self.memberCase(field.name)
+        swFieldName = self.swiftMemberCase(field.name)
+        typeName = self.getTypeName(field.type, field.type_name)
+        builtIn = self.typeIsBuiltIn(field.type, field.type_name)
+        swiftName = "Angel_" + typeName
+        indent = "    " * indentationLevel
+        if swiftName.endswith("?"):
+            optional = True
+            swiftName = swiftName[:-1]
+        else:
+            optional = False
+        isList = field.label == FieldDescriptorProto.LABEL_REPEATED
+        if isList and not builtIn:
+            conv = "data.%s.map { %s.from(data: $0) }" % \
+                (ktFieldName, swiftName)
+        elif builtIn:
+            conv = "data.%s" % ktFieldName
+            if typeName.startswith("U"):
+                conv = "%s(%s)" % (typeName, conv)
+        elif optional and not isList:
+            conv = "%s.from(data: %s)" % (swiftName, ktFieldName)
+        else:
+            conv = "%s.from(data: data.%s)" % (swiftName, ktFieldName)
+        conv = indent + "$0.%s = %s" % (swFieldName, conv)
+        if optional and not isList:
+            lines = [
+                indent + "if let %s = data.%s {" % (ktFieldName, ktFieldName),
+                "    " + conv,
+                indent + "}"
+            ]
+        else:
+            lines = [ conv ]
+        return lines
+
+
+class FromSwiftGenerator(Generator):
+    ''' A helper class which makes it possible for the main generator to make
+        two passes on each message using the super processMessage(); this
+        handles the pass for adding extensions to the Swift message classes to
+        convert them to their KMM data counterparts. '''
+    def __init__(self, namespace: str, options: dict[str, str],
+                 knownTypes: list[str | None],
+                 knownTypesByName: dict[str, str]):
+        super().__init__(baseName="kmm-swift-conv")
+        self.namespace = namespace
+        self.options = options
+        self.knownTypes = knownTypes
+        self.knownTypesByName = knownTypesByName
+    
+    def messageOpening(self, msg: DescriptorProto,
+                       name: str, indentationLevel: int) -> list[str]:
+        typeName = self.typeNameCase(name)
+        if typeName.endswith("?"): typeName = typeName[:-1]
+        indent = "    " * indentationLevel
+        return [
+            indent + "func toData() -> %s.%s {" % (self.namespace, typeName),
+            indent + "    return %s.%s(" % (self.namespace, typeName)
+        ]
+    
+    def messageClosing(self, msg: DescriptorProto,
+                       name: str, indentationLevel: int) -> list[str]:
+        indent = "    " * indentationLevel
+        return [indent + "    )", indent + "}"]
+
+    def processField(self, msg: DescriptorProto,
+                     field: FieldDescriptorProto,
+                     indentationLevel: int) -> list[str]:
+        ktFieldName = self.memberCase(field.name)
+        swFieldName = self.swiftMemberCase(field.name)
+        has = "has" + swFieldName[0].upper() + swFieldName[1:]
+        typeName = self.getTypeName(field.type, field.type_name)
+        if typeName.endswith("?"):
+            typeName = typeName[:-1]
+            optional = True
+        else:
+            optional = False
+        builtIn = self.typeIsBuiltIn(field.type, field.type_name)
+        isList = field.label == FieldDescriptorProto.LABEL_REPEATED
+        if isList and not builtIn:
+            expr = "%s.map { $0.toData() }" % swFieldName
+        elif optional:
+            expr = "%s ? %s.toData() : nil" % (has, swFieldName)
+        elif builtIn:
+            expr = swFieldName
+            if typeName.startswith("U"):
+                expr = "%s(%s)" % (typeName[1:], expr)
+        else:   # enum
+            expr = "%s.toData()" % swFieldName
+        indent = "    " * indentationLevel
+        return [indent + "    %s: %s," % (ktFieldName, expr)]
+
+
+class SwiftConvGenerator(Generator):
+    def __init__(self):
+        super().__init__(baseName="kmm-swift-conv")
+        self.knownTypes = (
+            None,
+            "Double", "Float", "Int64", "UInt64", "Int32",
+            "Int64", "Int32", "Bool", "String",
+            None, # Group
+            None, # Message
+            "[UInt8]", "UInt32",
+            None, # Enum
+            "Int32", "Int64",
+            "Int32", "Int64"
+        )
+        self.knownTypesByName = {
+            "double": "Double",
+            "float": "Float",
+            "int32": "Int32",
+            "int64": "Int64",
+            "uint32": "UInt32",
+            "uint64": "UInt64",
+            "sint32": "Int32",
+            "sint64": "Int64",
+            "fixed32": "Int32",
+            "fixed64": "Int64",
+            "sfixed32": "Int32",
+            "sfixed64": "Int64",
+            "bool": "Bool",
+            "string": "String",
+            "bytes": "[UInt8]"
+        }
+    
+    def getOutputFileName(self, protoFileName: str, packageName: str) -> str:
+        return self.typeNameCase(packageName) + "Converters.swift"
+
+    def getContent(self, protoFile: FileDescriptorProto) -> str:
+        # toSwift and fromSwift need to be initialised with data read from
+        # protoFile, and this is a handy place to do it.
+        self.namespace = self.getNamespace(protoFile)
+        self.toSwift = ToSwiftGenerator(self.namespace,
+                                        self.options,
+                                        self.knownTypes,
+                                        self.knownTypesByName)
+        self.fromSwift = FromSwiftGenerator(self.namespace,
+                                            self.options,
+                                            self.knownTypes,
+                                            self.knownTypesByName)
+        return super().getContent(protoFile)
+
+    def processEnum(self, enum: EnumDescriptorProto,
+                    indentationLevel: int) -> list[str]:
+        typeName = self.typeNameCase(enum.name)
+        swiftName = "Angel_" + typeName
+        companion = "%s.%sCompanion.shared" % (self.namespace, typeName)
+        lines = [
+            "extension %s {" % swiftName,
+            "    func toData() -> %s.%s {" % (self.namespace, typeName),
+            "        return %s.from(value: Int32(rawValue))" % companion,
+            "    }",
+            "",
+            # The Swift constructor here returns an optional, but it can never
+            # be nil because missing cases are converted to .UNKNOWN(rawValue)
+            # so it's safe to just use ! here.
+            "    static func from(data: %s.%s) -> %s {" % \
+                (self.namespace, typeName, swiftName),
+            "        return %s(rawValue: Int(data.value))!" % swiftName,
+            "    }",
+            "}"
+        ]
+        indent = "    " * indentationLevel
+        lines = [indent + l for l in lines]
+        return lines
+
+    def messageOpening(self, msg: DescriptorProto,
+                       name: str, indentationLevel: int) -> list[str]:
+        typeName = self.typeNameCase(name)
+        if typeName.endswith("?"): typeName = typeName[:-1]
+        swiftName = "Angel_" + typeName
+        indent = "    " * indentationLevel
+        return [
+            indent + "extension %s {" % swiftName,
+        ]
+
+    def messageClosing(self, msg: DescriptorProto,
+                       name: str, indentationLevel: int) -> list[str]:
+        indent = "    " * indentationLevel
+        return [ indent + "}" ]
+
+    def processMessage(self, msg: DescriptorProto,
+                       indentationLevel: int) -> list[str]:
+        lines = self.messageOpening(msg, msg.name, indentationLevel)
+        closing = self.messageClosing(msg, msg.name, indentationLevel)
+        indentationLevel += 1
+        return lines + \
+            self.fromSwift.processMessage(msg, indentationLevel) + [""] + \
+            self.toSwift.processMessage(msg, indentationLevel) + \
+            closing
+
+    def getHeader(self, protoFile: FileDescriptorProto) -> list[str]:
+        shared = self.parameters.get("shared_module", "shared")
+        return [
+            "import " + str(shared),
+            "",
+        ]
+    
+    def getFooter(self, protoFile: FileDescriptorProto) -> list[str]:
+        return []
+    
+    def getTopLevelIndentation(self, protoFile: FileDescriptorProto) -> int:
+        return 0
+
+
+def main():
+    generator = SwiftConvGenerator()
+    generator.runOnStdinAndStdout()
+
+if __name__ == "__main__":
+    main()

@@ -63,8 +63,16 @@ class Generator:
     def process(self, req: CodeGeneratorRequest) -> CodeGeneratorResponse:
         ''' Processes a CodeGeneratorRequest and generates a
             CodeGeneratorResponse by calling self.processFile() for each proto
-            file in req. '''
+            file in req.
+            It also parses the request's `parameter` field, generating a dict
+            available in self.parameters.
+            '''
         response = CodeGeneratorResponse()
+        if len(req.parameter) > 0:
+            parameters = (p.split("=") for p in req.parameter.split(","))
+            self.parameters = { p[0]: p[1] for p in parameters }
+        else:
+            self.parameters = {}
         for f in req.proto_file:
             self.processFile(f, response)
         return response
@@ -153,6 +161,10 @@ class Generator:
             lines.append("")
         for field in msg.field:
             lines.extend(self.processField(msg, field, indentationLevel))
+        # If the last field has a trailing comma, that's optional in Kotlin
+        # but forbidden in Swift, so remove it.
+        if lines[-1].endswith(","):
+            lines[-1] = lines[-1][:-1]
         indentationLevel -= 1
         lines.extend(self.messageClosing(msg, name, indentationLevel))
         return lines
@@ -348,6 +360,24 @@ class Generator:
         elements = name.split("_")
         elements = list(e.capitalize() for e in elements)
         elements[0] = elements[0][0].lower() + elements[0][1:]
+        return "".join(elements)
+
+    def swiftMemberCase(self, name: str) -> str:
+        ''' Like memberCase but deals with a quirk in the upstream Swift
+            output which has trailing 'Id' replaced by 'ID'. I assume
+            "foo_id_bar" also becomes "FooIDBar" but I haven't checked, nor
+            whether there are any similar quirks that can be dealt with by
+            pattern matching. Nor what should happen to "id_foo_bar". Please
+            report any issues, PRs welcome. '''
+        if "_" not in name:
+            name = name[0].lower() + name[1:]
+            if name.endswith("Id"):
+                name = name[:-1] + "D"
+        elements = name.split("_")
+        elements = list(e.capitalize() for e in elements)
+        elements[0] = elements[0][0].lower() + elements[0][1:]
+        elements = [elements[0]] + ["ID" if e == "Id" else e \
+                                    for e in elements[1:]]
         return "".join(elements)
 
     def getNamespace(self, protoFile: FileDescriptorProto) -> str:

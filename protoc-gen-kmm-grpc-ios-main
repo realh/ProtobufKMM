@@ -1,0 +1,125 @@
+#!/usr/bin/env python3
+
+from google.protobuf.descriptor_pb2 import \
+    FileDescriptorProto, \
+    EnumDescriptorProto, DescriptorProto, \
+    ServiceDescriptorProto, MethodDescriptorProto
+
+from generator import Generator
+
+class KMMGrpcIosDelegateGenerator(Generator):
+    def __init__(self):
+        ''' self.clientStreamingInterfaces is a dict (keyed by input type)
+            of interfaces used to support Kotlin-Swift bridging of client
+            streaming calls. '''
+        super().__init__(baseName="kmm-grpc-ios-main")
+        self.clientStreamingInterfaces: dict[str, list[str]] = {}
+    
+    def getOutputFileName(self, protoFileName: str, packageName: str) -> str:
+        return self.typeNameCase(packageName) + "GrpcIosDelegate.kt"
+
+    def getContent(self, protoFile: FileDescriptorProto) -> str:
+        content = super().getContent(protoFile)
+        if len(self.clientStreamingInterfaces) > 0:
+            for lines in self.clientStreamingInterfaces.values():
+                content += "\n" + "\n".join(lines) + "\n"
+        return content
+
+    def processEnum(self, enum: EnumDescriptorProto,
+                    indentationLevel: int) -> list[str]:
+        return []
+
+    def processMessage(self, msg: DescriptorProto,
+                       indentationLevel: int) -> list[str]:
+        return []
+
+    def getHeader(self, protoFile: FileDescriptorProto) -> list[str]:
+        return [
+            "package " + self.options["java_package"],
+            "",
+        ]
+    
+    def getFooter(self, protoFile: FileDescriptorProto) -> list[str]:
+        return [""]
+    
+    def getTopLevelIndentation(self, protoFile: FileDescriptorProto) -> int:
+        return 1
+
+    def getServiceHeader(self, protoFile: FileDescriptorProto,
+                         serv: ServiceDescriptorProto,
+                         indentationLevel: int) -> list[str]:
+        serviceName = self.getServiceName(protoFile, serv)
+        return [
+            "interface %sGrpcIosDelegate {" % serviceName
+        ]
+
+    def getServiceFooter(self, protoFile: FileDescriptorProto,
+                         serv: ServiceDescriptorProto,
+                         indentationLevel: int) -> list[str]:
+        return ["}"]
+
+    def getServiceMethod(self, protoFile: FileDescriptorProto,
+                        serv: ServiceDescriptorProto,
+                        method: MethodDescriptorProto,
+                        indentationLevel: int) -> list[str]:
+        if method.client_streaming:
+            return self.getClientStreamingMethodSignature(
+                protoFile,
+                serv,
+                method,
+                indentationLevel,
+            ) + [""]
+        else:
+            return self.getMethodSignature(
+                protoFile,
+                serv,
+                method,
+                indentationLevel,
+            )
+
+    def getClientStreamingMethodSignature(
+        self, protoFile: FileDescriptorProto,
+        serv: ServiceDescriptorProto,
+        method: MethodDescriptorProto,
+        indentationLevel: int,
+    ) -> list[str]:
+        # Server streaming methods don't need to be suspending
+        if method.server_streaming:
+            suspend = ""
+        else:
+            suspend = self.getSuspendKeyword()
+        typeName = self.convertTypeName(method.input_type)
+        inputType = self.getNamespace(protoFile) + "." + typeName
+        ifName = self.getStreamerInterfaceName(protoFile, serv, typeName)
+        if ifName not in self.clientStreamingInterfaces:
+            func = self.getFuncKeyword()
+            self.clientStreamingInterfaces[ifName] = [
+                "interface %s {" % ifName,
+                "    %ssend(message: %s)" % (func, inputType),
+                "    %sfinish()" % func,
+                "}",
+            ]
+        resultCb = self.getResultCallback(protoFile, method)
+        resultCb = ["   " + l for l in resultCb]
+        # Note that in callback declarations Kotlin and Swift both use ->
+        return ["    %s%s%s(" % (suspend,
+                                 self.getFuncKeyword(),
+                                 self.memberCase(method.name)
+                                 ),
+        ] + resultCb + [ "    )%s%s" % (self.getReturnSymbol(), ifName) ]
+    
+    def getReturn(self, protoFile: FileDescriptorProto,
+                  method: MethodDescriptorProto) -> list[str]:
+        return self.getResultCallbackInLieuOfReturn(protoFile, method)
+    
+    def getSuspendKeyword(self) -> str:
+        # Can't use suspend in Kotlin-Swift bridge
+        return ""
+    
+
+def main():
+    generator = KMMGrpcIosDelegateGenerator()
+    generator.runOnStdinAndStdout()
+
+if __name__ == "__main__":
+    main()

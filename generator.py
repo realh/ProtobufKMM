@@ -197,7 +197,7 @@ class Generator:
         return []
     
     def getServiceName(self, protoFile: FileDescriptorProto,
-                         serv: ServiceDescriptorProto) -> str:
+                       serv: ServiceDescriptorProto) -> str:
         packageName = self.typeNameCase(protoFile.package)
         serviceName = self.typeNameCase(serv.name)
         if len(protoFile.service) == 1 and packageName == serviceName:
@@ -243,7 +243,7 @@ class Generator:
                                self.memberCase(method.name)
                                ),
                 "%s    request: %s%s" % (indent, inputType, ret[0]),
-               ] + [indent + r for r in ret[1:]]
+               ] + [indent + r for r in ret[1:]] + [""]
     
     def convertClientStreamingInput(self, typeName: str) -> str:
         ''' Converts the type of a request input to a client streaming version.
@@ -253,10 +253,12 @@ class Generator:
     def getReturn(self, protoFile: FileDescriptorProto,
                   method: MethodDescriptorProto) -> list[str]:
         ''' Gets a return clause for a method: the closing brace and return
-            type. When using callbacks, override and forward to
-            getResultCallbackInLieuOfReturn instead. The first line should be
-            appended to the end of the parameters in case it's a comma separator
-            for a result callback parameter. '''
+        type. When using callbacks, override and forward to
+        getResultCallbackInLieuOfReturn instead. Remember that closure types use
+        "->" for return in both Kotlin and Swift, whereas in method/function
+        definitions Kotlin uses ":".  The first line should be appended to the
+        end of the parameters in case it's a comma separator for a result
+        callback parameter. '''
         typeName = self.getNamespace(protoFile) + "." + \
             self.convertTypeName(method.output_type)
         if method.server_streaming:
@@ -268,7 +270,7 @@ class Generator:
         ''' For methods using callbacks, gets the final parameter used to
             return the result. If the callback receives success and failure
             both null, it means a server stream was closed without error. '''
-        return [","] + self.getResultCallback(protoFile, method)
+        return [","] + self.getResultCallback(protoFile, method) + [")"]
 
     def getResultCallback(self, protoFile: FileDescriptorProto,
                   method: MethodDescriptorProto) -> list[str]:
@@ -281,7 +283,7 @@ class Generator:
             typeName += "?"
         return ["    result: (",
                 "        success: %s," % typeName,
-                "        failure: String?" % typeName,
+                "        failure: String?",
                 "    )" + self.getReturnVoid(),
                 ]
     
@@ -296,8 +298,10 @@ class Generator:
 
     def getReturnVoid(self) -> str:
         ''' Gets the return clause (symbol and type) for a function that
-            returns nothing (Void/Unit). '''
-        return self.getReturnSymbol() + "Unit"
+            returns nothing (Void/Unit). This is used for closure type
+            definitions, so the return symbol is -> for Kotlin as well as
+            for Swift. '''
+        return " -> Unit"
 
     def getSuspendKeyword(self) -> str:
         ''' This is only useful for Kotlin, Swift should return "". '''
@@ -422,3 +426,11 @@ class Generator:
             to provide them with a namespace to help avoid clashes when accessed
             from Swift. This returns a suitable name for it. '''
         return self.typeNameCase(protoFile.package) + "ProtoData"
+        
+    def getStreamerInterfaceName(self, protoFile: FileDescriptorProto,
+                                 serv: ServiceDescriptorProto,
+                                 typeName: str) -> str:
+        ''' Gets a name for the interface used to send client streaming 
+            messages from Kotlin to Swift.  '''
+        return self.typeNameCase(self.getServiceName(protoFile, serv)) + \
+            typeName + "Streamer"

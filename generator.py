@@ -235,7 +235,7 @@ class Generator:
         inputType = self.getNamespace(protoFile) + "." + \
             self.convertTypeName(method.input_type)
         if method.client_streaming:
-            inputType = "Flow<%s>" % inputType
+            inputType = self.convertClientStreamingInput(inputType)
         ret = self.getReturn(protoFile, method)
         return ["%s%s%s%s(" % (indent,
                                suspend,
@@ -243,24 +243,61 @@ class Generator:
                                self.memberCase(method.name)
                                ),
                 "%s    request: %s%s" % (indent, inputType, ret[0]),
-                indent + ret[1],
-               ]
+               ] + [indent + r for r in ret[1:]]
+    
+    def convertClientStreamingInput(self, typeName: str) -> str:
+        ''' Converts the type of a request input to a client streaming version.
+        '''
+        return "Flow<%s>" % typeName
     
     def getReturn(self, protoFile: FileDescriptorProto,
                   method: MethodDescriptorProto) -> list[str]:
-        ''' Gets a return clause for a method. The first line should be
-            concatenated to the parameters. For Kotlin this is a comma.
-            The second line contains the closing brace and return type.
-            For Swift use getCallbackParameter instead (TODO).  '''
+        ''' Gets a return clause for a method: the closing brace and return
+            type. When using callbacks, override and forward to
+            getResultCallbackInLieuOfReturn instead. The first line should be
+            appended to the end of the parameters in case it's a comma separator
+            for a result callback parameter. '''
         typeName = self.getNamespace(protoFile) + "." + \
             self.convertTypeName(method.output_type)
         if method.server_streaming:
             typeName = "Flow<%s>" % typeName
-        return [",", "): " + typeName]
+        return [ "", ")" + self.getReturnSymbol() + typeName]
+    
+    def getResultCallbackInLieuOfReturn(self, protoFile: FileDescriptorProto,
+                  method: MethodDescriptorProto) -> list[str]:
+        ''' For methods using callbacks, gets the final parameter used to
+            return the result. If the callback receives success and failure
+            both null, it means a server stream was closed without error. '''
+        return [","] + self.getResultCallback(protoFile, method)
+
+    def getResultCallback(self, protoFile: FileDescriptorProto,
+                  method: MethodDescriptorProto) -> list[str]:
+        ''' For methods using callbacks, gets the final parameter used to
+            return the result. If the callback receives success and failure
+            both null, it means a server stream was closed without error. '''
+        typeName = self.getNamespace(protoFile) + "." + \
+            self.convertTypeName(method.output_type)
+        if not typeName.endswith("?"):
+            typeName += "?"
+        return ["    result: (",
+                "        success: %s," % typeName,
+                "        failure: String?" % typeName,
+                "    )" + self.getReturnVoid(),
+                ]
     
     def getFuncKeyword(self) -> str:
-        ''' Gets the keyword for a function in the target language. '''
+        ''' Gets the keyword for a function in the target language, including
+            a trailing space. '''
         return "fun "
+    
+    def getReturnSymbol(self) -> str:
+        ''' Including any spaces. ": " for Kotlin, use " -> " for Swift. '''
+        return ": "
+
+    def getReturnVoid(self) -> str:
+        ''' Gets the return clause (symbol and type) for a function that
+            returns nothing (Void/Unit). '''
+        return self.getReturnSymbol() + "Unit"
 
     def getSuspendKeyword(self) -> str:
         ''' This is only useful for Kotlin, Swift should return "". '''

@@ -20,24 +20,9 @@ I don't know Objective-C, and because I don't want to have to use Cocoapods.
 
 It's very simple, you just need python3 and the protobuf package, which is
 available with pip or most package managers. Rather than install anything you
-can either put simple wrapper scripts in your PATH, for example:
-
-### protoc-gen-kmm-data
-```
-#!/bin/sh
-exec /usr/bin/env python3 "$HOME/Code/ProtobufKMM/protoc-gen-kmm-data.py" "$@"
-```
-and invoke with:
-```
-protoc --kmm-data_out=/some/path /path/to/some_protobuf_file.proto
-```
-
-or include the path to the python scripts in your protoc invocations using the
+can include the path to the python scripts in your protoc invocations using the
 `--plugin` option eg:
-`--plugin=kmm-data="$HOME/Code/ProtobufKMM/protoc-gen-kmm-data.py"`.
-
-The bad news is that the first time you create any Swift files you will have
-to manually add them to your XCode project by dragging them from Finder.
+`--plugin="$HOME/Code/ProtobufKMM/protoc-gen-kmm-data"`.
 
 ## The protoc plugins
 
@@ -116,6 +101,12 @@ which include:
 So these plugins will generate incorrect code for them. However, this code is
 sufficiently simple and well-documented that I think a third party wouldn't
 find it too difficult to add those features if they need them.
+
+### Adding Swift files to your XCode project
+
+The first time you create any Swift files you will have to manually add them to
+your XCode project by dragging them from Finder, even if they are created in
+the correct location.
 
 ## Licence
 

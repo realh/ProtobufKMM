@@ -16,7 +16,7 @@ class KMMGrpcIosDelegateGenerator(Generator):
         self.clientStreamingInterfaces: dict[str, list[str]] = {}
     
     def getOutputFileName(self, protoFileName: str, packageName: str) -> str:
-        return self.typeNameCase(packageName) + "GrpcIosDelegate.kt"
+        return self.typeNameCase(packageName) + "IosGrpcDelegate.kt"
 
     def getContent(self, protoFile: FileDescriptorProto) -> str:
         content = super().getContent(protoFile)

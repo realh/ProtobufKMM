@@ -1,19 +1,16 @@
 package org.example.proto
 
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.launch
 import kotlin.coroutines.*
 
 object GrpcClientHelper {
-    suspend fun<T, R> unaryCall(
-        request: T,
-        closure: (T, (R?, String?) -> Unit) -> Unit
+    suspend fun<R> unaryCall(
+        closure: ((R?, String?) -> Unit) -> Unit
     ): R {
         return suspendCoroutine { continuation ->
-            closure(request) { success, failure ->
+            closure { success, failure ->
                 if (failure != null) {
                     continuation.resumeWithException(Exception(failure))
                 } else if (success == null) {
@@ -25,12 +22,11 @@ object GrpcClientHelper {
         }
     }
 
-    fun<T, R> serverStreamingCall(
-        request: T,
-        closure: (T, (R?, String?) -> Unit) -> Unit
+    fun<R> serverStreamingCall(
+        closure: ((R?, String?) -> Unit) -> Unit
     ): Flow<R> {
         return callbackFlow {
-            closure(request) { success, failure ->
+            closure { success, failure ->
                 if (failure != null) {
                     cancel("GRPC stream error: $failure")
                 } else if (success == null) {
@@ -72,13 +68,11 @@ object GrpcClientHelper {
         return result
     }
 
-    suspend fun<T, R, S> bidirectionalStreamingCall(
+    fun<T, R> bidirectionalStreamingCall(
         request: Flow<T>,
         start: ((R?, String?)->Unit)->ClientStreamer<T>,
     ): Flow<R> {
-        val context = coroutineContext
         return callbackFlow {
-            val producerScope = this
             val sender = start { success, failure ->
                 if (failure != null) {
                     cancel("GRPC stream error: $failure")
@@ -88,7 +82,7 @@ object GrpcClientHelper {
                     trySend(success)
                 }
             }
-            CoroutineScope(context).launch {
+            MainScope().launch {
                 request.collect { sender.send(it) }
                 sender.finish()
             }

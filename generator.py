@@ -432,5 +432,7 @@ class Generator:
                                  typeName: str) -> str:
         ''' Gets a name for the interface used to send client streaming 
             messages from Kotlin to Swift.  '''
-        return self.typeNameCase(self.getServiceName(protoFile, serv)) + \
-            typeName + "Streamer"
+        if typeName.endswith("?"):
+            typeName = typeName[:-1]
+        return "GrpcClientHelper.ClientStreamer<%s.%s>" % \
+            (self.getNamespace(protoFile), typeName)

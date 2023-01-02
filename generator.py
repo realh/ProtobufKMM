@@ -426,13 +426,3 @@ class Generator:
             to provide them with a namespace to help avoid clashes when accessed
             from Swift. This returns a suitable name for it. '''
         return self.typeNameCase(protoFile.package) + "ProtoData"
-        
-    def getStreamerInterfaceName(self, protoFile: FileDescriptorProto,
-                                 serv: ServiceDescriptorProto,
-                                 typeName: str) -> str:
-        ''' Gets a name for the interface used to send client streaming 
-            messages from Kotlin to Swift.  '''
-        if typeName.endswith("?"):
-            typeName = typeName[:-1]
-        return "GrpcClientHelper.ClientStreamer<%s.%s>" % \
-            (self.getNamespace(protoFile), typeName)

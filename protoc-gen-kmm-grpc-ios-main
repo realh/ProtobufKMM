@@ -14,21 +14,21 @@ from google.protobuf.descriptor_pb2 import \
 from generator import Generator
 
 class KMMGrpcIosHelperGenerator(Generator):
-    ''' Generates GrpcClientHelper.kt by copying the template file. '''
+    ''' Generates GrpcIosClientHelper.kt by copying the template file. '''
     def __init__(self, namespace: str, options: dict[str, str]):
         super().__init__(baseName="kmm-grpc-ios-main")
         self.namespace = namespace
         self.options = options
 
     def process(self, req: CodeGeneratorRequest) -> CodeGeneratorResponse:
-        ''' We only want to create one GrpcClientHelper. This generator must
+        ''' We only want to create one GrpcIosClientHelper. This generator must
             be run last. '''
         req.proto_file = [req.proto_file[0]]
         return super().process(req)
 
     def getContent(self, protoFile: FileDescriptorProto) -> str:
         inputName = os.path.join(os.path.dirname(sys.argv[0]),
-                                 "GrpcClientHelper.kt")
+                                 "GrpcIosClientHelper.kt")
         f = open(inputName, "r")
         template = str(f.read())
         f.close()
@@ -39,8 +39,7 @@ class KMMGrpcIosHelperGenerator(Generator):
         return template
 
     def getOutputFileName(self, protoFileName: str, packageName: str) -> str:
-        protoFileName = protoFileName.replace(".proto", "")
-        return self.typeNameCase(packageName) + "GrpcClientHelper.kt"
+        return "GrpcIosClientHelper.kt"
 
     
 class KMMGrpcIosDelegateGenerator(Generator):
@@ -52,7 +51,7 @@ class KMMGrpcIosDelegateGenerator(Generator):
         self.options = options
     
     def getOutputFileName(self, protoFileName: str, packageName: str) -> str:
-        return self.typeNameCase(packageName) + "IosGrpcDelegate.kt"
+        return self.typeNameCase(packageName) + "GrpcIosDelegate.kt"
 
     def processEnum(self, enum: EnumDescriptorProto,
                     indentationLevel: int) -> list[str]:
@@ -136,10 +135,20 @@ class KMMGrpcIosDelegateGenerator(Generator):
     def getSuspendKeyword(self) -> str:
         # Can't use suspend in Kotlin-Swift bridge
         return ""
+        
+    def getStreamerInterfaceName(self, protoFile: FileDescriptorProto,
+                                 serv: ServiceDescriptorProto,
+                                 typeName: str) -> str:
+        ''' Gets a name for the interface used to send client streaming 
+            messages from Kotlin to Swift.  '''
+        if typeName.endswith("?"):
+            typeName = typeName[:-1]
+        return "GrpcIosClientHelper.ClientStreamer<%s.%s>" % \
+            (self.getNamespace(protoFile), typeName)
     
 
-class KMMIosGrpcClientGenerator(Generator):
-    ''' Generates the IosGrpcClient (Kotlin, implementing the shared interface).
+class KMMGrpcIosClientGenerator(Generator):
+    ''' Generates the GrpcIosClient (Kotlin, implementing the shared interface).
     '''
     def __init__(self, namespace: str, options: dict[str, str]):
         super().__init__(baseName="kmm-grpc-ios-main")
@@ -148,7 +157,7 @@ class KMMIosGrpcClientGenerator(Generator):
     
     
     def getOutputFileName(self, protoFileName: str, packageName: str) -> str:
-        return self.typeNameCase(packageName) + "IosGrpcClient.kt"
+        return self.typeNameCase(packageName) + "GrpcIosClient.kt"
 
     def processEnum(self, enum: EnumDescriptorProto,
                     indentationLevel: int) -> list[str]:
@@ -163,7 +172,7 @@ class KMMIosGrpcClientGenerator(Generator):
         return [
             "package " + pkg,
             "",
-            "import kotlinx.coroutines.flow.Flow"
+            "import kotlinx.coroutines.flow.Flow",
             "",
         ]
     
@@ -179,7 +188,7 @@ class KMMIosGrpcClientGenerator(Generator):
         serviceName = self.getServiceName(protoFile, serv)
         indent = "    " * indentationLevel
         return [
-            indent + "class %sIosGrpcClient (" % serviceName,
+            indent + "class %sGrpcIosClient (" % serviceName,
             indent + "    private val delegate: %sGrpcIosDelegate" % serv.name,
             indent + "): %sGrpcClient {" % serviceName,
         ]
@@ -203,16 +212,17 @@ class KMMIosGrpcClientGenerator(Generator):
         lines[-1] += " = "
         methodName = self.memberCase(method.name)
         if method.client_streaming and method.server_streaming:
-            lines[-1] += "GrpcClientHelper.bidirectionalStreamingCall(request) {"
+            lines[-1] += \
+                "GrpcIosClientHelper.bidirectionalStreamingCall(request) {"
             body = "delegate.%s(it)"
         elif method.client_streaming:
-            lines[-1] += "GrpcClientHelper.clientStreamingCall(request) {"
+            lines[-1] += "GrpcIosClientHelper.clientStreamingCall(request) {"
             body = "delegate.%s(it)"
         elif method.server_streaming:
-            lines[-1] += "GrpcClientHelper.serverStreamingCall {"
+            lines[-1] += "GrpcIosClientHelper.serverStreamingCall {"
             body = "delegate.%s(request, it)"
         else:
-            lines[-1] += "GrpcClientHelper.unaryCall {"
+            lines[-1] += "GrpcIosClientHelper.unaryCall {"
             body = "delegate.%s(request, it)"
         lines.append(indent + "    " + body % methodName)
         lines.extend([indent + "}", ""])
@@ -229,7 +239,7 @@ class KMMGrpcIosMainGenerator(Generator):
         self.namespace = self.getNamespace(protoFile)
         for generator in (
                 KMMGrpcIosDelegateGenerator(self.namespace, self.options),
-                KMMIosGrpcClientGenerator(self.namespace, self.options),
+                KMMGrpcIosClientGenerator(self.namespace, self.options),
                 KMMGrpcIosHelperGenerator(self.namespace, self.options),
         ):
             generator.processFile(protoFile, response)

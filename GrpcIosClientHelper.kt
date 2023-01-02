@@ -5,7 +5,7 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.*
 import kotlin.coroutines.*
 
-object GrpcClientHelper {
+object GrpcIosClientHelper {
     suspend fun<R> unaryCall(
         closure: ((R?, String?) -> Unit) -> Unit
     ): R {

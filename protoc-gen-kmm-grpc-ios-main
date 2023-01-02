@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
 
+import os.path
+import sys
+
+from google.protobuf.compiler.plugin_pb2 import \
+    CodeGeneratorRequest, CodeGeneratorResponse
+
 from google.protobuf.descriptor_pb2 import \
     FileDescriptorProto, \
     EnumDescriptorProto, DescriptorProto, \
@@ -7,9 +13,43 @@ from google.protobuf.descriptor_pb2 import \
 
 from generator import Generator
 
-class KMMGrpcIosDelegateGenerator(Generator):
-    def __init__(self):
+class KMMGrpcIosHelperGenerator(Generator):
+    ''' Generates GrpcClientHelper.kt by copying the template file. '''
+    def __init__(self, namespace: str, options: dict[str, str]):
         super().__init__(baseName="kmm-grpc-ios-main")
+        self.namespace = namespace
+        self.options = options
+
+    def process(self, req: CodeGeneratorRequest) -> CodeGeneratorResponse:
+        ''' We only want to create one GrpcClientHelper. This generator must
+            be run last. '''
+        req.proto_file = [req.proto_file[0]]
+        return super().process(req)
+
+    def getContent(self, protoFile: FileDescriptorProto) -> str:
+        inputName = os.path.join(os.path.dirname(sys.argv[0]),
+                                 "GrpcClientHelper.kt")
+        f = open(inputName, "r")
+        template = str(f.read())
+        f.close()
+        package = self.options.get("java_package")
+        if package is not None:
+            template = template.replace("package org.example.proto",
+                                        "package " + package)
+        return template
+
+    def getOutputFileName(self, protoFileName: str, packageName: str) -> str:
+        protoFileName = protoFileName.replace(".proto", "")
+        return self.typeNameCase(packageName) + "GrpcClientHelper.kt"
+
+    
+class KMMGrpcIosDelegateGenerator(Generator):
+    ''' Generates the Kotlin interface for the delegate which is actually
+        implemented in Swift. '''
+    def __init__(self, namespace: str, options: dict[str, str]):
+        super().__init__(baseName="kmm-grpc-ios-main")
+        self.namespace = namespace
+        self.options = options
     
     def getOutputFileName(self, protoFileName: str, packageName: str) -> str:
         return self.typeNameCase(packageName) + "IosGrpcDelegate.kt"
@@ -64,7 +104,7 @@ class KMMGrpcIosDelegateGenerator(Generator):
                 serv,
                 method,
                 indentationLevel,
-            )
+            ) + [""]
 
     def getClientStreamingMethodSignature(
         self, protoFile: FileDescriptorProto,
@@ -87,7 +127,7 @@ class KMMGrpcIosDelegateGenerator(Generator):
                                  self.getFuncKeyword(),
                                  self.memberCase(method.name)
                                  ),
-        ] + resultCb + [ "    )%s%s" % (self.getReturnSymbol(), ifName) ]
+        ] + resultCb + [ "    )%s%s" % (self.getReturnSymbol(), ifName)]
     
     def getReturn(self, protoFile: FileDescriptorProto,
                   method: MethodDescriptorProto) -> list[str]:
@@ -99,12 +139,10 @@ class KMMGrpcIosDelegateGenerator(Generator):
     
 
 class KMMIosGrpcClientGenerator(Generator):
+    ''' Generates the IosGrpcClient (Kotlin, implementing the shared interface).
+    '''
     def __init__(self):
         super().__init__(baseName="kmm-grpc-ios-main")
-        self.hasUnary = False
-        self.hasServerStream = False
-        self.hasClientStream = False
-        self.hasBidirectionalStream = False
     
     def getOutputFileName(self, protoFileName: str, packageName: str) -> str:
         return self.typeNameCase(packageName) + "IosGrpcClient.kt"
@@ -178,9 +216,24 @@ class KMMIosGrpcClientGenerator(Generator):
         ])
         return lines
 
+
+class KMMGrpcIosMainGenerator(Generator):
+    def __init__(self):
+        super().__init__(baseName="kmm-grpc-ios-main")
+    
+    def processFile(self, protoFile: FileDescriptorProto,
+                    response: CodeGeneratorResponse):
+        self.options = self.getOptions(protoFile)
+        self.namespace = self.getNamespace(protoFile)
+        for generator in (
+                KMMGrpcIosDelegateGenerator(self.namespace, self.options),
+                KMMGrpcIosHelperGenerator(self.namespace, self.options),
+        ):
+            generator.processFile(protoFile, response)
+    
+
 def main():
-    generator = KMMGrpcIosDelegateGenerator()
-    generator.runOnStdinAndStdout()
+    KMMGrpcIosMainGenerator().runOnStdinAndStdout()
 
 if __name__ == "__main__":
     main()

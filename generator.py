@@ -243,7 +243,7 @@ class Generator:
                                self.memberCase(method.name)
                                ),
                 "%s    request: %s%s" % (indent, inputType, ret[0]),
-               ] + [indent + r for r in ret[1:]] + [""]
+               ] + [indent + r for r in ret[1:]]
     
     def convertClientStreamingInput(self, typeName: str) -> str:
         ''' Converts the type of a request input to a client streaming version.

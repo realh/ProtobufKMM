@@ -76,7 +76,7 @@ is shortened to `ServiceNameGrpcClient`. The filename is
 Generates classes in the Android module implementing the above GrpClient
 interfaces, converting the data types to and from their JVM implementation
 counterparts. Where entity names have a suffix of `GrpcClient` above, the
-Android implementations have a suffix of `AndroidGrpcClient`.
+Android implementations have a suffix of `GrpcAndroidClient`.
 
 ### protoc-gen-kmm-grpc-ios (TODO)
 

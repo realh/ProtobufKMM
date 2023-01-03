@@ -12,7 +12,7 @@ class KMMGrpcAndroidGenerator(Generator):
         super().__init__(baseName="kmm-grpc-android")
     
     def getOutputFileName(self, protoFileName: str, packageName: str) -> str:
-        return self.typeNameCase(packageName) + "AndroidGrpcClient.kt"
+        return self.typeNameCase(packageName) + "GrpcAndroidClient.kt"
 
     def processEnum(self, enum: EnumDescriptorProto,
                     indentationLevel: int) -> list[str]:
@@ -50,7 +50,7 @@ class KMMGrpcAndroidGenerator(Generator):
         serviceName = self.getServiceName(protoFile, serv)
         indent = "    " * indentationLevel
         return [
-            indent + "class %sAndroidGrpcClient (" % serviceName,
+            indent + "class %sGrpcAndroidClient (" % serviceName,
             indent + "    val stub: %sCoroutineStub" % serv.name,
             indent + "): %sGrpcClient {" % serviceName,
         ]

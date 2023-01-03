@@ -78,11 +78,29 @@ interfaces, converting the data types to and from their JVM implementation
 counterparts. Where entity names have a suffix of `GrpcClient` above, the
 Android implementations have a suffix of `GrpcAndroidClient`.
 
-### protoc-gen-kmm-grpc-ios (TODO)
+The class constructor takes a parameter
+`private val stub: ServiceNameCoroutineStub`, which is an instance of a class
+defined in the output from the upstream grpc-kotlin code generator. You are
+responsible for instantiating the stub.
 
-Will generate classes in the `iosMain` part of the shared module, implementing
-the above interface. They will use Swift delegates and callbacks to interface
-between Kotlin and grpc-swift.
+### protoc-gen-kmm-grpc-ios-main
+
+Generates files in the `iosMain` part of the shared module:
+
+* `ServiceNameGrpcIosClient.kt`: Kotlin native/iOS class(es) implementing
+`ServiceNameGrpcClient`. It uses `GrpcIosClientHelper` to bridge between
+Kotlin's coroutines and flows and a callback-based API implemented by
+`ServiceNameGrpcIosDelegate`.
+
+* `ServiceNameGrpcIosDelegate.kt`: Kotlin interface(s) for callback-based
+versions of each service's API. `ServiceNameGrpcIosClient` delegates to an
+instance of `ServiceNameGrpcIosDelegate`. The latter is implemented in Swift
+and uses grpc-swift.
+
+* `GrpcIosClientHelper.kt`: An object which can be used for all and any Grpc
+services. It contains a generic interface and methods to bridge between
+`ServiceNameGrpcIosClient` and `ServiceNameGrpcIosDelegate` for each type of
+rpc call (unary, client-streaming, server-streaming, bidirectional-streaming).
 
 ### protoc-gen-kmm-grpc-swift (TODO)
 

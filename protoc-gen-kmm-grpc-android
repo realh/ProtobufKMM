@@ -51,7 +51,7 @@ class KMMGrpcAndroidGenerator(Generator):
         indent = "    " * indentationLevel
         return [
             indent + "class %sGrpcAndroidClient (" % serviceName,
-            indent + "    val stub: %sCoroutineStub" % serv.name,
+            indent + "    private val stub: %sCoroutineStub" % serv.name,
             indent + "): %sGrpcClient {" % serviceName,
         ]
 

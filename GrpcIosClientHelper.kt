@@ -5,7 +5,19 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.*
 import kotlin.coroutines.*
 
+/**
+ * Helper functions for calling grpc-swift methods from Kotlin and getting
+ * results via callbacks.
+ */
 object GrpcIosClientHelper {
+    /**
+     * Wrapper for a gRPC unary call.
+     *
+     * @param R type of result (a ProtobufKMM data class).
+     * @param closure calls a method in a GrpcIosDelegate implementation and
+     *        calls the callback supplied as its parameter with the result.
+     * @return the response from the server.
+     */
     suspend fun<R> unaryCall(
         closure: ((R?, String?) -> Unit) -> Unit
     ): R {
@@ -22,6 +34,16 @@ object GrpcIosClientHelper {
         }
     }
 
+    /**
+     * Wrapper for a gRPC server-streaming call.
+     *
+     * @param R type of each message in the returned flow (a ProtobufKMM data
+              class).
+     * @param closure calls a method in a GrpcIosDelegate implementation and
+     *        calls the callback supplied as its parameter with each response
+     *        message.
+     * @return a flow of responses from the server.
+     */
     fun<R> serverStreamingCall(
         closure: ((R?, String?) -> Unit) -> Unit
     ): Flow<R> {
@@ -30,7 +52,7 @@ object GrpcIosClientHelper {
                 if (failure != null) {
                     cancel("GRPC stream error: $failure")
                 } else if (success == null) {
-                    cancel("Received null from GRPC stream")
+                    cancel("GRPC server stream closed")
                 } else {
                     trySend(success)
                 }
@@ -39,6 +61,20 @@ object GrpcIosClientHelper {
         }
     }
 
+    /**
+     * Wrapper for a gRPC client-streaming call.
+     * 
+     * The [start] closure is similar to [unaryCall]'s closure but also returns
+     * a [ClientStreamer] provided by the Swift GrpcIosDelegate implementation.
+     * This function uses the streamer to feed each message from the input flow
+     * to grpc-swift.
+     *
+     * @param T type of each message in the request (input) flow (a ProtobufKMM
+              data class).
+     * @param R type of result (a ProtobufKMM data class).
+     * @param start see above.
+     * @return a flow of responses from the server.
+     */
     suspend fun<T, R> clientStreamingCall(
         request: Flow<T>,
         start: ((R?, String?)->Unit)->ClientStreamer<T>,
@@ -68,6 +104,17 @@ object GrpcIosClientHelper {
         return result
     }
 
+    /**
+     * Wrapper for a gRPC bidirectional-streaming call.
+     *
+     * @param T type of each message in the request (input) flow (a ProtobufKMM
+              data class).
+     * @param R type of each message in the returned flow (a ProtobufKMM data
+              class).
+     * @param start see the explanation for [clientStreamingCall].
+     * @return the response from the server, sent after the input stream is
+               closed.
+     */
     fun<T, R> bidirectionalStreamingCall(
         request: Flow<T>,
         start: ((R?, String?)->Unit)->ClientStreamer<T>,
@@ -90,8 +137,23 @@ object GrpcIosClientHelper {
         }
     }
 
+    /**
+     * Kotlin interface for a Swift object that feeds messages to a
+     * client-streaming gRPC call.
+     *
+     * @param T message type.
+     */
     interface ClientStreamer<T> {
+        /**
+         * Send a message.
+         *
+         * @param message
+         */
         fun send(message: T)
+
+        /**
+         * Should be called when the input stream ends.
+         */
         fun finish()
     }
 }

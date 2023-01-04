@@ -14,10 +14,11 @@ import log
 class Generator:
     ''' A Generator loads a .proto file and generates some source code from it.
         It must be overridden to provide certain methods. '''
-    def __init__(self, baseName: str):
+    def __init__(self, baseName: str, swift = False):
         ''' baseName is the base name of the plugin eg protoc-gen-kmm-data has a
             base name of "kmm-data". '''
         self.baseName = baseName
+        self.swift = swift
         self.log = log.getLogger("protoc-gen-" + baseName)
         self.log.debug("sys.argv = %s" % str(sys.argv))
         self.knownTypes = (
@@ -122,6 +123,7 @@ class Generator:
                 lines.extend(s)
                 lines.append("")
         lines.extend(self.getFooter(protoFile))
+        lines = [str(l) for l in lines]
         return "\n".join(lines) + "\n"
     
     def getHeader(self, protoFile: FileDescriptorProto) -> list[str]:
@@ -200,10 +202,7 @@ class Generator:
                        serv: ServiceDescriptorProto) -> str:
         packageName = self.typeNameCase(protoFile.package)
         serviceName = self.typeNameCase(serv.name)
-        if len(protoFile.service) == 1 and packageName == serviceName:
-            return serviceName
-        else:
-            return packageName + serviceName
+        return packageName + serviceName
 
     def getServiceFooter(self, protoFile: FileDescriptorProto,
                          serv: ServiceDescriptorProto,
@@ -224,9 +223,11 @@ class Generator:
     def getMethodSignature(self, protoFile: FileDescriptorProto,
                            serv: ServiceDescriptorProto,
                            method: MethodDescriptorProto,
-                           indentationLevel: int) -> list[str]:
+                           indentationLevel: int,
+                           withCallbacks = False) -> list[str]:
         ''' Gets a method signature (without opening brace). '''
-        indent = "    " * indentationLevel
+        if self.swift:
+            withCallbacks = True
         # Server streaming methods don't need to be suspending
         if method.server_streaming:
             suspend = ""
@@ -234,31 +235,44 @@ class Generator:
             suspend = self.getSuspendKeyword()
         inputType = self.getNamespace(protoFile) + "." + \
             self.convertTypeName(method.input_type)
-        if method.client_streaming:
-            inputType = self.convertClientStreamingInput(inputType)
-        ret = self.getReturn(protoFile, method)
-        return ["%s%s%s%s(" % (indent,
-                               suspend,
-                               self.getFuncKeyword(),
-                               self.memberCase(method.name)
-                               ),
-                "%s    request: %s%s" % (indent, inputType, ret[0]),
-               ] + [indent + r for r in ret[1:]]
+        if method.client_streaming and withCallbacks:
+            arg = self.getResultCallback(protoFile, method)
+            arg = ["    " + l for l in arg]
+            ret = [")%s%s" % (
+                self.getReturnSymbol(),
+                self.getStreamerInterfaceName(protoFile, serv, inputType)
+            )]
+        else:
+            if method.client_streaming:
+                inputType = self.convertClientStreamingInput(inputType)
+            ret = self.getReturn(protoFile, method)
+            arg = ["    request: %s%s" % (inputType, ret[0])]
+            ret = ret[1:]
+        lines = ["%s%s%s(" % (suspend,
+                              self.getFuncKeyword(),
+                              self.memberCase(method.name)
+                              ),
+        ]
+        lines.extend(arg)
+        lines.extend(ret)
+        return ["    " + l for l in lines]
     
     def convertClientStreamingInput(self, typeName: str) -> str:
         ''' Converts the type of a request input to a client streaming version.
-        '''
+            N/A in swift. '''
         return "Flow<%s>" % typeName
     
     def getReturn(self, protoFile: FileDescriptorProto,
                   method: MethodDescriptorProto) -> list[str]:
         ''' Gets a return clause for a method: the closing brace and return
         type. When using callbacks, override and forward to
-        getResultCallbackInLieuOfReturn instead. Remember that closure types use
-        "->" for return in both Kotlin and Swift, whereas in method/function
-        definitions Kotlin uses ":".  The first line should be appended to the
-        end of the parameters in case it's a comma separator for a result
-        callback parameter. '''
+        getResultCallbackInLieuOfReturn instead (this is automatic for Swift).
+        Remember that closure types use "->" for return in both Kotlin and
+        Swift, whereas in method/function definitions Kotlin uses ":".  The
+        first line should be appended to the end of the parameters in case it's
+        a comma separator for a result callback parameter. '''
+        if self.swift:
+            return self.getResultCallbackInLieuOfReturn(protoFile, method)
         typeName = self.getNamespace(protoFile) + "." + \
             self.convertTypeName(method.output_type)
         if method.server_streaming:
@@ -270,7 +284,9 @@ class Generator:
         ''' For methods using callbacks, gets the final parameter used to
             return the result. If the callback receives success and failure
             both null, it means a server stream was closed without error. '''
-        return [","] + self.getResultCallback(protoFile, method) + [")"]
+        cb = self.getResultCallback(protoFile, method)
+        cb = ["    " + l for l in cb]
+        return [","] + cb + [")"]
 
     def getResultCallback(self, protoFile: FileDescriptorProto,
                   method: MethodDescriptorProto) -> list[str]:
@@ -281,31 +297,31 @@ class Generator:
             self.convertTypeName(method.output_type)
         if not typeName.endswith("?"):
             typeName += "?"
-        return ["    result: (",
-                "        success: %s," % typeName,
-                "        failure: String?",
-                "    )" + self.getReturnVoid(),
-                ]
+        escaping = "@escaping " if self.swift else ""
+        return ["result: %s(%s, String?)%s" % \
+                (escaping, typeName, self.getReturnVoid())
+        ]
     
     def getFuncKeyword(self) -> str:
         ''' Gets the keyword for a function in the target language, including
             a trailing space. '''
-        return "fun "
+        return "func " if self.swift else "fun "
     
     def getReturnSymbol(self) -> str:
         ''' Including any spaces. ": " for Kotlin, use " -> " for Swift. '''
-        return ": "
+        return " -> " if self.swift else ": "
 
     def getReturnVoid(self) -> str:
         ''' Gets the return clause (symbol and type) for a function that
             returns nothing (Void/Unit). This is used for closure type
             definitions, so the return symbol is -> for Kotlin as well as
             for Swift. '''
-        return " -> Unit"
+        t = "Void" if self.swift else "Unit"
+        return "->" + t
 
     def getSuspendKeyword(self) -> str:
         ''' This is only useful for Kotlin, Swift should return "". '''
-        return "suspend "
+        return "" if self.swift else "suspend "
     
     def getTypeName(self, number: int, typeName: str | None) -> str:
         ''' Gets the typename in the target language (here, Kotlin). '''
@@ -426,3 +442,16 @@ class Generator:
             to provide them with a namespace to help avoid clashes when accessed
             from Swift. This returns a suitable name for it. '''
         return self.typeNameCase(protoFile.package) + "ProtoData"
+
+    def getStreamerInterfaceName(self, protoFile: FileDescriptorProto,
+                                 serv: ServiceDescriptorProto,
+                                 typeName: str) -> str:
+        ''' Gets a name for the interface used to send client streaming 
+            messages from Kotlin to Swift.  '''
+        if typeName.endswith("?"):
+            typeName = typeName[:-1]
+        if self.swift:
+            return "GrpcIosClientHelperClientStreamer"
+        else:
+            return "GrpcIosClientHelper.ClientStreamer<%s>" % typeName
+    

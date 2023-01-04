@@ -90,44 +90,14 @@ class KMMGrpcIosDelegateGenerator(Generator):
                         serv: ServiceDescriptorProto,
                         method: MethodDescriptorProto,
                         indentationLevel: int) -> list[str]:
-        if method.client_streaming:
-            return self.getClientStreamingMethodSignature(
-                protoFile,
-                serv,
-                method,
-                indentationLevel,
-            ) + [""]
-        else:
-            return self.getMethodSignature(
-                protoFile,
-                serv,
-                method,
-                indentationLevel,
-            ) + [""]
+        return self.getMethodSignature(
+            protoFile,
+            serv,
+            method,
+            indentationLevel,
+            withCallbacks=True
+        ) + [""]
 
-    def getClientStreamingMethodSignature(
-        self, protoFile: FileDescriptorProto,
-        serv: ServiceDescriptorProto,
-        method: MethodDescriptorProto,
-        indentationLevel: int,
-    ) -> list[str]:
-        # Server streaming methods don't need to be suspending
-        if method.server_streaming:
-            suspend = ""
-        else:
-            suspend = self.getSuspendKeyword()
-        typeName = self.convertTypeName(method.input_type)
-        inputType = self.getNamespace(protoFile) + "." + typeName
-        ifName = self.getStreamerInterfaceName(protoFile, serv, typeName)
-        resultCb = self.getResultCallback(protoFile, method)
-        resultCb = ["   " + l for l in resultCb]
-        # Note that in callback declarations Kotlin and Swift both use ->
-        return ["    %s%s%s(" % (suspend,
-                                 self.getFuncKeyword(),
-                                 self.memberCase(method.name)
-                                 ),
-        ] + resultCb + [ "    )%s%s" % (self.getReturnSymbol(), ifName)]
-    
     def getReturn(self, protoFile: FileDescriptorProto,
                   method: MethodDescriptorProto) -> list[str]:
         return self.getResultCallbackInLieuOfReturn(protoFile, method)
@@ -136,16 +106,6 @@ class KMMGrpcIosDelegateGenerator(Generator):
         # Can't use suspend in Kotlin-Swift bridge
         return ""
         
-    def getStreamerInterfaceName(self, protoFile: FileDescriptorProto,
-                                 serv: ServiceDescriptorProto,
-                                 typeName: str) -> str:
-        ''' Gets a name for the interface used to send client streaming 
-            messages from Kotlin to Swift.  '''
-        if typeName.endswith("?"):
-            typeName = typeName[:-1]
-        return "GrpcIosClientHelper.ClientStreamer<%s.%s>" % \
-            (self.getNamespace(protoFile), typeName)
-    
 
 class KMMGrpcIosClientGenerator(Generator):
     ''' Generates the GrpcIosClient (Kotlin, implementing the shared interface).
@@ -169,10 +129,15 @@ class KMMGrpcIosClientGenerator(Generator):
 
     def getHeader(self, protoFile: FileDescriptorProto) -> list[str]:
         pkg = self.options["java_package"]
+        importHelper = "import %s.GrpcIosClientHelper" % pkg
         return [
             "package " + pkg,
             "",
             "import kotlinx.coroutines.flow.Flow",
+            importHelper + ".unaryCall",
+            importHelper + ".serverStreamingCall",
+            importHelper + ".clientStreamingCall",
+            importHelper + ".bidirectionalStreamingCall",
             "",
         ]
     
@@ -206,23 +171,23 @@ class KMMGrpcIosClientGenerator(Generator):
         lines = self.getMethodSignature(protoFile,
                                         serv,
                                         method,
-                                        indentationLevel)
+                                        indentationLevel,
+                                        withCallbacks=False)
         indent = "    " * indentationLevel
         lines[0] = indent + "override " + lines[0][4:]
         lines[-1] += " = "
         methodName = self.memberCase(method.name)
         if method.client_streaming and method.server_streaming:
-            lines[-1] += \
-                "GrpcIosClientHelper.bidirectionalStreamingCall(request) {"
+            lines[-1] += "bidirectionalStreamingCall(request) {"
             body = "delegate.%s(it)"
         elif method.client_streaming:
-            lines[-1] += "GrpcIosClientHelper.clientStreamingCall(request) {"
+            lines[-1] += "clientStreamingCall(request) {"
             body = "delegate.%s(it)"
         elif method.server_streaming:
-            lines[-1] += "GrpcIosClientHelper.serverStreamingCall {"
+            lines[-1] += "serverStreamingCall {"
             body = "delegate.%s(request, it)"
         else:
-            lines[-1] += "GrpcIosClientHelper.unaryCall {"
+            lines[-1] += "unaryCall {"
             body = "delegate.%s(request, it)"
         lines.append(indent + "    " + body % methodName)
         lines.extend([indent + "}", ""])

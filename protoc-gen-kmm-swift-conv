@@ -12,20 +12,22 @@ class ToSwiftGenerator(Generator):
         two passes on each message using the super processMessage(); this
         handles the pass for converting the KMM data classes to their Swift
         implementations, using extensions on the Swift classes. '''
-    def __init__(self, namespace: str, options: dict[str, str],
+    def __init__(self, packageName: str,
+                 namespace: str, options: dict[str, str],
                  knownTypes: list[str | None],
                  knownTypesByName: dict[str, str]):
         super().__init__(baseName="kmm-swift-conv")
+        self.packageName = packageName
         self.namespace = namespace
         self.options = options
         self.knownTypes = knownTypes
         self.knownTypesByName = knownTypesByName
-    
+
     def messageOpening(self, msg: DescriptorProto,
                        name: str, indentationLevel: int) -> list[str]:
         typeName = self.typeNameCase(name)
         if typeName.endswith("?"): typeName = typeName[:-1]
-        swiftName = "Angel_" + typeName
+        swiftName = "%s_%s" % (self.packageName, typeName)
         dataName = "%s.%s" % (self.namespace, typeName)
         indent = "    " * indentationLevel
         return [
@@ -47,7 +49,7 @@ class ToSwiftGenerator(Generator):
         swFieldName = self.swiftMemberCase(field.name)
         typeName = self.getTypeName(field.type, field.type_name)
         builtIn = self.typeIsBuiltIn(field.type, field.type_name)
-        swiftName = "Angel_" + typeName
+        swiftName = "%s_%s" % (self.packageName, typeName)
         indent = "    " * indentationLevel
         if swiftName.endswith("?"):
             optional = True
@@ -83,10 +85,12 @@ class FromSwiftGenerator(Generator):
         two passes on each message using the super processMessage(); this
         handles the pass for adding extensions to the Swift message classes to
         convert them to their KMM data counterparts. '''
-    def __init__(self, namespace: str, options: dict[str, str],
+    def __init__(self, packageName: str,
+                 namespace: str, options: dict[str, str],
                  knownTypes: list[str | None],
                  knownTypesByName: dict[str, str]):
         super().__init__(baseName="kmm-swift-conv")
+        self.packageName = packageName
         self.namespace = namespace
         self.options = options
         self.knownTypes = knownTypes
@@ -173,12 +177,15 @@ class SwiftConvGenerator(Generator):
     def getContent(self, protoFile: FileDescriptorProto) -> str:
         # toSwift and fromSwift need to be initialised with data read from
         # protoFile, and this is a handy place to do it.
+        self.packageName = self.typeNameCase(protoFile.package)
         self.namespace = self.getNamespace(protoFile)
-        self.toSwift = ToSwiftGenerator(self.namespace,
+        self.toSwift = ToSwiftGenerator(self.packageName,
+                                        self.namespace,
                                         self.options,
                                         self.knownTypes,
                                         self.knownTypesByName)
-        self.fromSwift = FromSwiftGenerator(self.namespace,
+        self.fromSwift = FromSwiftGenerator(self.packageName,
+                                            self.namespace,
                                             self.options,
                                             self.knownTypes,
                                             self.knownTypesByName)
@@ -187,7 +194,7 @@ class SwiftConvGenerator(Generator):
     def processEnum(self, enum: EnumDescriptorProto,
                     indentationLevel: int) -> list[str]:
         typeName = self.typeNameCase(enum.name)
-        swiftName = "Angel_" + typeName
+        swiftName = "%s_%s" % (self.packageName, typeName)
         companion = "%s.%sCompanion.shared" % (self.namespace, typeName)
         lines = [
             "extension %s {" % swiftName,
@@ -212,7 +219,7 @@ class SwiftConvGenerator(Generator):
                        name: str, indentationLevel: int) -> list[str]:
         typeName = self.typeNameCase(name)
         if typeName.endswith("?"): typeName = typeName[:-1]
-        swiftName = "Angel_" + typeName
+        swiftName = "%s_%s" % (self.packageName, typeName)
         indent = "    " * indentationLevel
         return [
             indent + "extension %s {" % swiftName,

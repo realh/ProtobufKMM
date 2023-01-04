@@ -139,7 +139,9 @@ object GrpcIosClientHelper {
 
     /**
      * Kotlin interface for a Swift object that feeds messages to a
-     * client-streaming gRPC call.
+     * client-streaming gRPC call. Note: in Swift this is mapped to 
+     * a non-generic protocol called GrpcIosClientHelperClientStreamer
+     * with T replace by Any?.
      *
      * @param T message type.
      */

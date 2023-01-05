@@ -19,21 +19,20 @@ class KMMGrpcAndroidGenerator(Generator):
                                 response: CodeGeneratorResponse):
         pass
 
-    def getHeader(self, protoFile: FileDescriptorProto) -> list[str]:
+    def getServiceImports(self, protoFile: FileDescriptorProto,
+                          serv: ServiceDescriptorProto) -> list[str]:
         pkg = self.options["java_package"]
         importFlow = "import kotlinx.coroutines.flow."
         lines = [
-            "package " + pkg,
+            "package %s.kmm" % pkg,
             "",
             importFlow + "Flow",
             importFlow + "map",
-        ]
-        for service in protoFile.service:
             # Not sure if service.name is the whole story, but it should be
             # an easy fix if not.
-            lines.append("import %s.%sGrpcKt.%sCoroutineStub" % \
-                    (pkg, service.name, service.name))
-        return lines + [""]
+            "import %s.%sGrpcKt.%sCoroutineStub" % (pkg, serv.name, serv.name),
+            ""
+        ]
     
     def getFooter(self, protoFile: FileDescriptorProto) -> list[str]:
         return [""]

@@ -192,6 +192,10 @@ class Generator:
         else:
             return ["package %s.kmm" % self.options["java_package"], ""]
     
+    def getServiceImports(self, protoFile: FileDescriptorProto,
+                          serv: ServiceDescriptorProto) -> list[str]:
+        return self.getDataHeader(self, protoFile)
+    
     def getDataFooter(self, protoFile: FileDescriptorProto) -> list[str]:
         ''' Gets the last few lines to add to the end of  a file containing one
             or many messages/enums.. '''
@@ -256,9 +260,8 @@ class Generator:
 
     def getServiceHeader(self, protoFile: FileDescriptorProto,
                          serv: ServiceDescriptorProto) -> list[str]:
-        ''' Override to add the start of a service definition eg a class.
-        '''
-        lines = self.getDataHeader(self, protoFile)
+        ''' Gets the start of a service definition eg a class. '''
+        lines = self.getServiceImports(self, protoFile, serv)
         if self.swift:
             lines = ["import GRPC"] + lines
         servName = self.getServiceName(protoFile, serv)
@@ -266,7 +269,7 @@ class Generator:
             self.getServiceEntity(),
             servName,
             self.getClientVariety(),
-            self.getServiceOpenBracket()
+            self.getServiceOpenBracket(),
         ))
         return lines
     

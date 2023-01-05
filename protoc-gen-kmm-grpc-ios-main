@@ -154,7 +154,8 @@ class KMMGrpcIosClientGenerator(Generator):
         indent = "    " * indentationLevel
         return [
             indent + "class %sGrpcIosClient (" % serviceName,
-            indent + "    private val delegate: %sGrpcIosDelegate" % serv.name,
+            indent + "    private val delegate: %sGrpcIosDelegate" % \
+                serviceName,
             indent + "): %sGrpcClient {" % serviceName,
         ]
 

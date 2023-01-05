@@ -202,7 +202,10 @@ class Generator:
                        serv: ServiceDescriptorProto) -> str:
         packageName = self.typeNameCase(protoFile.package)
         serviceName = self.typeNameCase(serv.name)
-        return packageName + serviceName
+        if len(protoFile.service) == 1 and packageName == serviceName:
+            return serviceName
+        else:
+            return packageName + serviceName
 
     def getServiceFooter(self, protoFile: FileDescriptorProto,
                          serv: ServiceDescriptorProto,

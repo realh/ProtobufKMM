@@ -66,9 +66,11 @@ The output filename is `ProtoPackageConverters.swift`.
 
 Generates an interface for each service in the shared module which encapsulates
 all the rpc methods in the proto file, using suspend functions, Flows and the
-kmm-data types. Each interface is named `ProtoPackageServiceNameGrpcClient`; in
-this documentation `QualifiedService` stands for `ProtoPackageServiceName`. The
-filename is `ProtoPackageGrpcClient.kt`.
+kmm-data types.  The filename is `ProtoPackageGrpcClient.kt`.Each interface is
+named `QualifiedServiceGrpcClient`. If there is only one service in the proto
+file and they both have the same name, `QualifiedService` == `ProtoPackage` ==
+`ServiceName`, otherwise `QualifiedService` stands for
+`ProtoPackageServiceName`.
 
 ### protoc-gen-kmm-grpc-android
 

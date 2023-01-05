@@ -2,7 +2,7 @@ import re
 import sys
 
 from google.protobuf.compiler.plugin_pb2 import \
-    CodeGeneratorRequest, CodeGeneratorResponse
+    CodeGeneratorRequest, CodeGeneratorResponse, File
 from google.protobuf.descriptor_pb2 import \
     FileDescriptorProto, \
     EnumDescriptorProto, DescriptorProto, \
@@ -75,20 +75,16 @@ class Generator:
         else:
             self.parameters = {}
         for f in req.proto_file:
-            self.processFile(f, response)
+            self.processProtoFile(f, response)
         return response
     
-    def processFile(self, protoFile: FileDescriptorProto,
-                    response: CodeGeneratorResponse):
-        ''' Processes each proto file, adding a new output file to the response.
-            It sets self.options to a dict of the options read from protoFile.
-        '''
+    def processProtoFile(self, protoFile: FileDescriptorProto,
+                         response: CodeGeneratorResponse):
+        ''' Processes each proto file, adding a new set of output files to the
+            response. It first sets self.options to a dict of the options read
+            from protoFile. '''
         self.options = self.getOptions(protoFile)
-        fileName = self.getOutputFileName(protoFile.name,
-                protoFile.package)
-        file = response.file.add()
-        file.name = fileName
-        file.content = self.getContent(protoFile)
+        self.processMessagesAndEnums(protoFile, response)
     
     def getOptions(self, protoFile: FileDescriptorProto) -> dict[str, str]:
         ''' Returns a dict of options read from protoFile. '''
@@ -98,68 +94,137 @@ class Generator:
         optsDict = dict(i for i in kvs)
         return optsDict
 
-    def getOutputFileName(self, protoFileName: str, packageName: str) -> str:
-        ''' Gets an output file name based on the input proto filename and its
-            package name. '''
-        return protoFileName + ".kt"
+    def getOutputFilenameForClass(self, protoName: str,
+                                  className: str) -> str:
+        ''' Gets an output file name based on a qualified class (message or
+            enum) name. In Swift, each proto package has one file for all
+            messages and enums, so className should be "Data" or "Converters".
+            In Kotlin className should already use typename case convention
+            and include "Converter" for converter extensions. '''
+        if self.swift:
+            protoName = self.typeNameCase(protoName)
+            return "%s_%s.swift" % (protoName, className)
+        else:
+            return "%s.kt" % className
+    
+    def getRole(self):
+        ''' Return "Data" or "", "Converter" etc depending on which are being
+            generated: message/enum definitions or converters. '''
+        return ""
 
-    def getContent(self, protoFile: FileDescriptorProto) -> str:
-        ''' Generates the content for an output file as a string. '''
-        lines = self.getHeader(protoFile)
-        indentationLevel = self.getTopLevelIndentation(protoFile)
+    def addResponseFile(self, protoName: str,
+                        className: str, response: CodeGeneratorResponse,
+                        content: list[str]):
+        ''' Adds content to a new file in the response, named by
+            getOutputFileNameForClass. '''
+        file = response.file.add()
+        file.name = self.getOutputFilenameForClass(protoName, className)
+        file.content = "\n".join(content)
+    
+    def processMessagesAndEnums(self, protoFile: FileDescriptorProto,
+                                response: CodeGeneratorResponse):
+        ''' Processes messages and enums in protoFile. In Swift there is
+            one output file, in Kotlin there is one per message/enum. '''
+        protoName = self.typeNameCase(protoFile.name)
+        if self.swift:
+            content = self.getDataHeader(protoFile)
+        indentationLevel = 0
         for enum in protoFile.enum_type:
-            e = self.processEnum(enum, indentationLevel)
-            if len(e) > 0:
-                lines.extend(e)
-                lines.append("")
+            if not self.swift:
+                content = self.getDataHeader(protoFile)
+            e = self.processEnum(protoName, enum, indentationLevel)
+            content.extend(e)
+            if self.swift:
+                content.append("")
+            else:
+                content.extend(self.getDataFooter(protoFile))
+                self.addResponseFile(
+                    protoFile.package,
+                    self.convertTypeName(enum.name) + self.getRole(),
+                    response,
+                    content
+                )
         for msg in protoFile.message_type:
-            m = self.processMessage(msg, indentationLevel)
-            if len(m) > 0:
-                lines.extend(m)
-                lines.append("")
+            if not self.swift:
+                content = self.getDataHeader(protoFile)
+            m = self.processMessage(protoName, msg, indentationLevel)
+            content.extend(m)
+            if self.swift:
+                content.append("")
+            else:
+                content.extend(self.getDataFooter(protoFile))
+                self.addResponseFile(
+                    protoFile.package,
+                    self.convertTypeName(msg.name) + self.getRole(),
+                    response,
+                    content
+                )
+        if self.swift:
+            content.extend(self.getDataFooter(protoFile))
+            self.addResponseFile(
+                protoFile.package,
+                self.getRole(),
+                response,
+                content
+            )
+
+    def processServices(self, protoFile: FileDescriptorProto,
+                        response: CodeGeneratorResponse):
+        ''' Processes services in protoFile. There is one service per
+            output file. '''
         for serv in protoFile.service:
-            s = self.processService(protoFile, serv, indentationLevel)
-            if len(s) > 0:
-                lines.extend(s)
-                lines.append("")
-        lines.extend(self.getFooter(protoFile))
-        lines = [str(l) for l in lines]
-        return "\n".join(lines) + "\n"
+            content = self.processService(protoFile, serv)
+            self.addResponseFile(
+                protoFile.package,
+                self.typeNameCase(serv.name) + self.getRole(),
+                response,
+                content)
     
-    def getHeader(self, protoFile: FileDescriptorProto) -> list[str]:
-        ''' Gets the first few lines to start the output file. '''
+    def getDataHeader(self, protoFile: FileDescriptorProto) -> list[str]:
+        ''' Gets the first few lines to start a file containing one or many
+            messages/enums. '''
+        if self.swift:
+            shared = self.parameters.get("shared_module", "shared")
+            return [
+                "import " + str(shared),
+                "",
+            ]
+        else:
+            return ["package %s.kmm" % self.options["java_package"], ""]
+    
+    def getDataFooter(self, protoFile: FileDescriptorProto) -> list[str]:
+        ''' Gets the last few lines to add to the end of  a file containing one
+            or many messages/enums.. '''
         return []
     
-    def getFooter(self, protoFile: FileDescriptorProto) -> list[str]:
-        ''' Gets the last few lines to add to the end of the output file. '''
-        return []
-    
-    def getTopLevelIndentation(self, protoFile: FileDescriptorProto) -> int:
-        ''' Gets the indentation to use for the top-level classes. '''
-        return 0
-    
-    def processEnum(self, enum: EnumDescriptorProto,
+    def processEnum(self, prefix: str,
+                    enum: EnumDescriptorProto,
                     indentationLevel: int) -> list[str]:
         ''' Returns a list of strings (one per line) for an enum definition.
             Each line is indented by an additional number of spaces multiplied
-            by indentationLevel. '''
+            by indentationLevel. prefix is derived from the proto package name,
+            followed by parent messages when nested. '''
         raise NotImplementedError("processEnum not overridden in %s",
                 self.baseName)
     
-    def processMessage(self, msg: DescriptorProto,
+    def processMessage(self, prefix: str,
+                       msg: DescriptorProto,
                        indentationLevel: int) -> list[str]:
         ''' Returns a representation of a protobuf message by calling
             messageOpening(), then messageField() repeatedly, then
             messageClosing(). Each line is indented by an additional number of
-            spaces multiplied by indentationLevel. '''
+            spaces multiplied by indentationLevel. prefix is derived from the
+            proto package name, followed by parent messages when nested. '''
         name = self.typeNameCase(msg.name)
-        lines = self.messageOpening(msg, name, indentationLevel)
+        lines = self.messageOpening(msg, prefix, name, indentationLevel)
         indentationLevel += 1
         for enum in msg.enum_type:
             lines.extend(self.processEnum(enum, indentationLevel))
             lines.append("")
         for nested in msg.nested_type:
-            lines.extend(self.processMessage(nested, indentationLevel))
+            lines.extend(self.processMessage(nested,
+                                             prefix + name,
+                                             indentationLevel))
             lines.append("")
         for field in msg.field:
             lines.extend(self.processField(msg, field, indentationLevel))
@@ -179,45 +244,56 @@ class Generator:
                 self.baseName)
     
     def processService(self, protoFile: FileDescriptorProto,
-                       serv: ServiceDescriptorProto,
-                       indentationLevel: int) -> list[str]:
+                       serv: ServiceDescriptorProto) -> list[str]:
         ''' Processes a grpc service. '''
-        lines = self.getServiceHeader(protoFile, serv, indentationLevel)
+        lines = self.getServiceHeader(protoFile, serv)
         for method in serv.method:
             lines.extend(self.getServiceMethod(protoFile,
                                                serv,
-                                               method,
-                                               indentationLevel))
-        lines.extend(self.getServiceFooter(protoFile, serv, indentationLevel))
+                                               method))
+        lines.extend(self.getServiceFooter(protoFile, serv))
         return lines
 
     def getServiceHeader(self, protoFile: FileDescriptorProto,
-                         serv: ServiceDescriptorProto,
-                         indentationLevel: int) -> list[str]:
-        ''' Override to provide the start of a service definition eg a class.
+                         serv: ServiceDescriptorProto) -> list[str]:
+        ''' Override to add the start of a service definition eg a class.
         '''
-        return []
+        lines = self.getDataHeader(self, protoFile)
+        if self.swift:
+            lines = ["import GRPC"] + lines
+        servName = self.getServiceName(protoFile, serv)
+        lines.append("%s %sGrpc%s %s" % (
+            self.getServiceEntity(),
+            servName,
+            self.getClientVariety(),
+            self.getServiceOpenBracket()
+        ))
+        return lines
+    
+    def getServiceEntity(self):
+        ''' "class", "interface" etc for a service definition. '''
+        return "class"
     
     def getServiceName(self, protoFile: FileDescriptorProto,
                        serv: ServiceDescriptorProto) -> str:
-        packageName = self.typeNameCase(protoFile.package)
+        ''' Gets the name of a service, which is qualified with the proto
+            package in Swift. '''
         serviceName = self.typeNameCase(serv.name)
-        if len(protoFile.service) == 1 and packageName == serviceName:
-            return serviceName
+        if self.swift:
+            packageName = self.typeNameCase(protoFile.package)
+            return packageName + "_" + serviceName
         else:
-            return packageName + serviceName
+            return serviceName
 
     def getServiceFooter(self, protoFile: FileDescriptorProto,
-                         serv: ServiceDescriptorProto,
-                         indentationLevel: int) -> list[str]:
+                         serv: ServiceDescriptorProto) -> list[str]:
         ''' Override to provide the end of a service definition eg a closing
             brace. '''
-        return []
+        return ["}"]
 
     def getServiceMethod(self, protoFile: FileDescriptorProto,
                         serv: ServiceDescriptorProto,
-                        method: MethodDescriptorProto,
-                        indentationLevel: int) -> list[str]:
+                        method: MethodDescriptorProto) -> list[str]:
         ''' Override to provide a method definition. It can simply forward
             to getMethodSignature for an interface.
         '''
@@ -236,8 +312,7 @@ class Generator:
             suspend = ""
         else:
             suspend = self.getSuspendKeyword()
-        inputType = self.getNamespace(protoFile) + "." + \
-            self.convertTypeName(method.input_type)
+        inputType = self.convertTypeName(method.input_type)
         if method.client_streaming and withCallbacks:
             arg = self.getResultCallback(protoFile, method)
             arg = ["    " + l for l in arg]
@@ -276,8 +351,7 @@ class Generator:
         a comma separator for a result callback parameter. '''
         if self.swift:
             return self.getResultCallbackInLieuOfReturn(protoFile, method)
-        typeName = self.getNamespace(protoFile) + "." + \
-            self.convertTypeName(method.output_type)
+        typeName = self.convertTypeName(method.output_type)
         if method.server_streaming:
             typeName = "Flow<%s>" % typeName
         return [ "", ")" + self.getReturnSymbol() + typeName]
@@ -296,8 +370,7 @@ class Generator:
         ''' For methods using callbacks, gets the final parameter used to
             return the result. If the callback receives success and failure
             both null, it means a server stream was closed without error. '''
-        typeName = self.getNamespace(protoFile) + "." + \
-            self.convertTypeName(method.output_type)
+        typeName = self.convertTypeName(method.output_type)
         if not typeName.endswith("?"):
             typeName += "?"
         escaping = "@escaping " if self.swift else ""
@@ -362,7 +435,7 @@ class Generator:
         return False
     
     def convertTypeName(self, name: str) -> str:
-        ''' Strips any leading qualifier (includes aren't currently supported).
+        ''' Strips any leading qualifier (includes aren't currently supported)
             and applies self.typeNameCase. '''
         if name.startswith("."):
             name = re.sub(r"^\.[a-zA-Z0-9_]*\.", "", name)
@@ -382,7 +455,8 @@ class Generator:
             constructor if not Kotlin. '''
         return self.knownTypesByName(name)
     
-    def messageOpening(self, msg: DescriptorProto,
+    def messageOpening(self, prefix: str,
+                       msg: DescriptorProto,
                        name: str,
                        indentationLevel: int) -> list[str]:
         ''' Returns the opening line(s) of a class etc representing a protobuf
@@ -440,12 +514,6 @@ class Generator:
                                     for e in elements[1:]]
         return "".join(elements)
 
-    def getNamespace(self, protoFile: FileDescriptorProto) -> str:
-        ''' The Kotlin message and enum classes should be members of an object
-            to provide them with a namespace to help avoid clashes when accessed
-            from Swift. This returns a suitable name for it. '''
-        return self.typeNameCase(protoFile.package) + "ProtoData"
-
     def getStreamerInterfaceName(self, protoFile: FileDescriptorProto,
                                  serv: ServiceDescriptorProto,
                                  typeName: str) -> str:
@@ -458,3 +526,11 @@ class Generator:
         else:
             return "GrpcIosClientHelper.ClientStreamer<%s>" % typeName
     
+    def getClientVariety(self):
+        ''' "AndroidClient", "IosDelegate" etc. '''
+        return "Client"
+    
+    def getServiceOpenBracket(self):
+        ''' "(" or "{" depending on whether the class has constructor
+            parameters.'''
+        return "{"

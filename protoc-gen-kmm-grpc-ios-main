@@ -70,9 +70,6 @@ class KMMGrpcIosDelegateGenerator(Generator):
     def getFooter(self, protoFile: FileDescriptorProto) -> list[str]:
         return [""]
     
-    def getTopLevelIndentation(self, protoFile: FileDescriptorProto) -> int:
-        return 1
-
     def getServiceHeader(self, protoFile: FileDescriptorProto,
                          serv: ServiceDescriptorProto,
                          indentationLevel: int) -> list[str]:
@@ -115,17 +112,12 @@ class KMMGrpcIosClientGenerator(Generator):
         self.namespace = namespace
         self.options = options
     
+    def processMessagesAndEnums(self, protoFile: FileDescriptorProto,
+                                response: CodeGeneratorResponse):
+        pass
     
     def getOutputFileName(self, protoFileName: str, packageName: str) -> str:
         return self.typeNameCase(packageName) + "GrpcIosClient.kt"
-
-    def processEnum(self, enum: EnumDescriptorProto,
-                    indentationLevel: int) -> list[str]:
-        return []
-
-    def processMessage(self, msg: DescriptorProto,
-                       indentationLevel: int) -> list[str]:
-        return []
 
     def getHeader(self, protoFile: FileDescriptorProto) -> list[str]:
         pkg = self.options["java_package"]
@@ -144,9 +136,6 @@ class KMMGrpcIosClientGenerator(Generator):
     def getFooter(self, protoFile: FileDescriptorProto) -> list[str]:
         return [""]
     
-    def getTopLevelIndentation(self, protoFile: FileDescriptorProto) -> int:
-        return 0
-
     def getServiceHeader(self, protoFile: FileDescriptorProto,
                          serv: ServiceDescriptorProto,
                          indentationLevel: int) -> list[str]:

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from google.protobuf.compiler.plugin_pb2 import CodeGeneratorResponse
 from google.protobuf.descriptor_pb2 import \
     FileDescriptorProto, \
     EnumDescriptorProto, DescriptorProto, \
@@ -11,14 +12,13 @@ class KtDataGenerator(Generator):
     def __init__(self):
         super().__init__(baseName="kmm-data")
     
-    def getOutputFileName(self, protoFileName: str, packageName: str) -> str:
-        return self.typeNameCase(packageName) + "Data.kt"
-
-    def processEnum(self, enum: EnumDescriptorProto,
+    def processEnum(self, prefix: str,
+                    enum: EnumDescriptorProto,
                     indentationLevel: int) -> list[str]:
         indent = "    " * indentationLevel
-        lines = [indent + \
-                "enum class %s(val value: Int) {" % \
+        lines = [
+            indent + '@ObjCName(swiftName = "%s")' % prefix,
+            indent + "enum class %s(val value: Int) {" % \
                 self.typeNameCase(enum.name)]
         indent += "    "
         for member in enum.value:
@@ -41,10 +41,15 @@ class KtDataGenerator(Generator):
         lines.append(indent + "}")
         return lines
 
-    def messageOpening(self, msg: DescriptorProto,
+    def messageOpening(self, prefix: str,
+                       msg: DescriptorProto,
                        name: str,
                        indentationLevel: int) -> list[str]:
-        return ["    " * indentationLevel + "data class %s(" % name]
+        indent = "    " * indentationLevel
+        return [
+            indent + '@ObjCName(swiftName = "%s")' % prefix,
+            indent + "data class %s(" % name,
+        ]
 
     def messageClosing(self, msg: DescriptorProto,
                        name: str,
@@ -88,18 +93,9 @@ class KtDataGenerator(Generator):
         propName = self.memberCase(field.name)
         return [indent + "val %s: %s = %s," % (propName, typeName, default)]
 
-    def getHeader(self, protoFile: FileDescriptorProto) -> list[str]:
-        return [
-            "package " + self.options["java_package"],
-            "",
-            "object " + self.getNamespace(protoFile) + " {"
-        ]
-    
-    def getFooter(self, protoFile: FileDescriptorProto) -> list[str]:
-        return ["}"]
-    
-    def getTopLevelIndentation(self, protoFile: FileDescriptorProto) -> int:
-        return 1
+    def processServices(self, protoFile: FileDescriptorProto,
+                        response: CodeGeneratorResponse):
+        pass
 
 
 def main():

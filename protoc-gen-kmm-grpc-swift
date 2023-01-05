@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
+from google.protobuf.compiler.plugin_pb2 import CodeGeneratorResponse
 from google.protobuf.descriptor_pb2 import \
     FileDescriptorProto, \
-    EnumDescriptorProto, DescriptorProto, \
     ServiceDescriptorProto, MethodDescriptorProto
 
 from generator import Generator
@@ -11,16 +11,12 @@ class KMMGrpcSwiftGenerator(Generator):
     def __init__(self):
         super().__init__(baseName="kmm-grpc-swift", swift=True)
     
+    def processMessagesAndEnums(self, protoFile: FileDescriptorProto,
+                                response: CodeGeneratorResponse):
+        pass
+
     def getOutputFileName(self, protoFileName: str, packageName: str) -> str:
         return self.typeNameCase(packageName) + "GrpcIosDelegate.swift"
-
-    def processEnum(self, enum: EnumDescriptorProto,
-                    indentationLevel: int) -> list[str]:
-        return []
-
-    def processMessage(self, msg: DescriptorProto,
-                       indentationLevel: int) -> list[str]:
-        return []
 
     def getHeader(self, protoFile: FileDescriptorProto) -> list[str]:
         shared = self.parameters.get("shared_module", "shared")
@@ -34,9 +30,6 @@ class KMMGrpcSwiftGenerator(Generator):
     def getFooter(self, protoFile: FileDescriptorProto) -> list[str]:
         return [""]
     
-    def getTopLevelIndentation(self, protoFile: FileDescriptorProto) -> int:
-        return 0
-
     def getServiceHeader(self, protoFile: FileDescriptorProto,
                          serv: ServiceDescriptorProto,
                          indentationLevel: int) -> list[str]:

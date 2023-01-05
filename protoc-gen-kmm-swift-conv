@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from google.protobuf.compiler.plugin_pb2 import CodeGeneratorResponse
 from google.protobuf.descriptor_pb2 import \
     FileDescriptorProto, \
     EnumDescriptorProto, DescriptorProto, \
@@ -171,9 +172,9 @@ class SwiftConvGenerator(Generator):
             "bytes": "[UInt8]"
         }
     
-    def getOutputFileName(self, protoFileName: str, packageName: str) -> str:
-        return self.typeNameCase(packageName) + "Converters.swift"
-
+    def getRole(self):
+        return "Converter"
+    
     def getContent(self, protoFile: FileDescriptorProto) -> str:
         # toSwift and fromSwift need to be initialised with data read from
         # protoFile, and this is a handy place to do it.
@@ -240,18 +241,12 @@ class SwiftConvGenerator(Generator):
             self.toSwift.processMessage(msg, indentationLevel) + \
             closing
 
-    def getHeader(self, protoFile: FileDescriptorProto) -> list[str]:
-        shared = self.parameters.get("shared_module", "shared")
-        return [
-            "import " + str(shared),
-            "",
-        ]
-    
     def getFooter(self, protoFile: FileDescriptorProto) -> list[str]:
         return []
     
-    def getTopLevelIndentation(self, protoFile: FileDescriptorProto) -> int:
-        return 0
+    def processServices(self, protoFile: FileDescriptorProto,
+                        response: CodeGeneratorResponse):
+        pass
 
 
 def main():

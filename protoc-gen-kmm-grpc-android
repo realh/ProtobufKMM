@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from google.protobuf.compiler.plugin_pb2 import CodeGeneratorResponse
 from google.protobuf.descriptor_pb2 import \
     FileDescriptorProto, \
     EnumDescriptorProto, DescriptorProto, \
@@ -14,13 +15,9 @@ class KMMGrpcAndroidGenerator(Generator):
     def getOutputFileName(self, protoFileName: str, packageName: str) -> str:
         return self.typeNameCase(packageName) + "GrpcAndroidClient.kt"
 
-    def processEnum(self, enum: EnumDescriptorProto,
-                    indentationLevel: int) -> list[str]:
-        return []
-
-    def processMessage(self, msg: DescriptorProto,
-                       indentationLevel: int) -> list[str]:
-        return []
+    def processMessagesAndEnums(self, protoFile: FileDescriptorProto,
+                                response: CodeGeneratorResponse):
+        pass
 
     def getHeader(self, protoFile: FileDescriptorProto) -> list[str]:
         pkg = self.options["java_package"]
@@ -41,19 +38,15 @@ class KMMGrpcAndroidGenerator(Generator):
     def getFooter(self, protoFile: FileDescriptorProto) -> list[str]:
         return [""]
     
-    def getTopLevelIndentation(self, protoFile: FileDescriptorProto) -> int:
-        return 0
-
     def getServiceHeader(self, protoFile: FileDescriptorProto,
-                         serv: ServiceDescriptorProto,
-                         indentationLevel: int) -> list[str]:
+                         serv: ServiceDescriptorProto) -> list[str]:
+        lines = super().getServiceHeader(protoFile, serv)
         serviceName = self.getServiceName(protoFile, serv)
-        indent = "    " * indentationLevel
-        return [
-            indent + "class %sGrpcAndroidClient (" % serviceName,
-            indent + "    private val stub: %sCoroutineStub" % serv.name,
-            indent + "): %sGrpcClient {" % serviceName,
-        ]
+        lines.extend([
+            "    private val stub: %sCoroutineStub" % serv.name,
+            "): %sGrpcClient {" % serviceName,
+        ])
+        return lines
 
     def getServiceFooter(self, protoFile: FileDescriptorProto,
                          serv: ServiceDescriptorProto,
@@ -62,14 +55,13 @@ class KMMGrpcAndroidGenerator(Generator):
 
     def getServiceMethod(self, protoFile: FileDescriptorProto,
                         serv: ServiceDescriptorProto,
-                        method: MethodDescriptorProto,
-                        indentationLevel: int) -> list[str]:
+                        method: MethodDescriptorProto) -> list[str]:
         indentationLevel += 1
         lines = self.getMethodSignature(protoFile,
                                         serv,
                                         method,
                                         indentationLevel)
-        indent = "    " * indentationLevel
+        indent = "    "
         lines[0] = indent + "override " + lines[0][4:]
         lines[-1] += " ="
         methodName = self.memberCase(method.name)
@@ -87,6 +79,12 @@ class KMMGrpcAndroidGenerator(Generator):
             ""
         ])
         return lines
+
+    def getClientVariety(self):
+        return "AndroidClient"
+    
+    def getServiceOpenBracket(self):
+        return "("
 
 
 def main():

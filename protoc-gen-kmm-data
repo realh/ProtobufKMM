@@ -15,9 +15,11 @@ class KtDataGenerator(Generator):
     def processEnum(self, prefix: str,
                     enum: EnumDescriptorProto,
                     indentationLevel: int) -> list[str]:
+        prefix = prefix.replace(".", "")
+        enumName = self.typeNameCase(enum.name)
         indent = "    " * indentationLevel
         lines = [
-            indent + '@ObjCName(swiftName = "%s")' % prefix,
+            indent + '@ObjCName(swiftName = "%s%s")' % (prefix, enumName),
             indent + "enum class %s(val value: Int) {" % \
                 self.typeNameCase(enum.name)]
         indent += "    "
@@ -45,6 +47,7 @@ class KtDataGenerator(Generator):
                        msg: DescriptorProto,
                        name: str,
                        indentationLevel: int) -> list[str]:
+        prefix = prefix.replace(".", "")
         indent = "    " * indentationLevel
         return [
             indent + '@ObjCName(swiftName = "%s%s")' % (prefix, name),

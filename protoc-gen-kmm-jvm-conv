@@ -8,23 +8,32 @@ from google.protobuf.descriptor_pb2 import \
 
 from generator import Generator
 
+class AuxGenerator(Generator):
+    def __init__(self, namespace: str, options: dict[str, str],
+                 javaPackage: str, kmmPackage: str):
+        super().__init__(baseName="kmm-jvm-conv")
+        self.namespace = namespace
+        self.options = options
+        self.javaPackage = javaPackage
+        self.kmmPackage = kmmPackage
+
 class ToJVMGenerator(Generator):
     ''' A helper class which makes it possible for the main generator to make
         two passes on each message using the super processMessage(); this
         handles the pass for converting the KMM data classes to their JVM
         implementations, using extensions on the data classes. '''
-    def __init__(self, namespace: str, options: dict[str, str]):
-        super().__init__(baseName="kmm-jvm-conv")
-        self.namespace = namespace
-        self.options = options
+    def getDataHeader(self, protoFile: FileDescriptorProto) -> list[str]:
+        return ["package " + self.javaPackage, ""]
     
-    def messageOpening(self, msg: DescriptorProto,
-                       name: str, indentationLevel: int) -> list[str]:
-        typeName = self.typeNameCase(name)
+    def messageOpening(self, prefix: str,
+                       msg: DescriptorProto,
+                       name: str,
+                       indentationLevel: int) -> list[str]:
+        typeName = self.convertTypeName(msg.name)
         camelName = self.memberCase(name)   # DSL builder
         return [
             "fun %s.%s.toProto(): %s {" % \
-                    (self.namespace, typeName, typeName),
+                    (self.kmmPackage, typeName, typeName),
             "    val data = this",
             "    return %s {" % camelName,
         ]
@@ -57,16 +66,14 @@ class ToJVMGenerator(Generator):
                 (fieldName, fieldName, conv)]
 
 
-class FromJVMGenerator(Generator):
+class FromJVMGenerator(AuxGenerator):
     ''' A helper class which makes it possible for the main generator to make
         two passes on each message using the super processMessage(); this
         handles the pass for adding extensions to the JVM message classes to
         convert them to their KMM data counterparts. '''
-    def __init__(self, namespace: str, options: dict[str, str]):
-        super().__init__(baseName="kmm-jvm-conv")
-        self.namespace = namespace
-        self.options = options
-
+    def getDataHeader(self, protoFile: FileDescriptorProto) -> list[str]:
+        return ["package " + self.javaPackage, ""]
+    
     def getRole(self):
         return "Converter"
     
@@ -110,24 +117,29 @@ class JvmConvGenerator(Generator):
     def __init__(self):
         super().__init__(baseName="kmm-jvm-conv")
     
+    def getDataHeader(self, protoFile: FileDescriptorProto) -> list[str]:
+        return ["package " + self.javaPackage, ""]
+    
     def getContent(self, protoFile: FileDescriptorProto) -> str:
         # toJvm and fromJvm need to be initialised with data read from
         # protoFile, and this is a handy place to do it.
         self.namespace = self.getNamespace(protoFile)
-        self.toJvm = ToJVMGenerator(self.namespace, self.options)
-        self.fromJvm = FromJVMGenerator(self.namespace, self.options)
+        self.toJvm = ToJVMGenerator(self.namespace, self.options,
+                                    self.javaPackage, self.kmmPackage)
+        self.fromJvm = FromJVMGenerator(self.namespace, self.options,
+                                        self.javaPackage, self.kmmPackage)
         return super().getContent(protoFile)
 
     def processEnum(self, enum: EnumDescriptorProto,
                     indentationLevel: int) -> list[str]:
-        typeName = self.typeNameCase(enum.name)
+        typeName = self.convertTypeName(enum.name)
+        dataType = "%s.%s" % (self.kmmPackage, typeName)
         lines = [
-            "fun %s.toData(): %s.%s {" % (typeName, self.namespace, typeName),
-            "    return %s.%s from number" % (self.namespace, typeName),
+            "fun %s.toData(): %s {" % (typeName, dataType),
+            "    return %s from number" % dataType,
             "}",
             "",
-            "fun %s.%s.toProto(): %s {" % \
-                    (self.namespace, typeName, typeName),
+            "fun %s.toProto(): %s {" % (dataType, typeName),
             "    return %s.forNumber(this.value)" % typeName,
             "}"
         ]

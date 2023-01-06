@@ -8,11 +8,7 @@ from google.protobuf.descriptor_pb2 import \
 
 from generator import Generator
 
-class ToSwiftGenerator(Generator):
-    ''' A helper class which makes it possible for the main generator to make
-        two passes on each message using the super processMessage(); this
-        handles the pass for converting the KMM data classes to their Swift
-        implementations, using extensions on the Swift classes. '''
+class AuxGenerator(Generator):
     def __init__(self, packageName: str,
                  namespace: str, options: dict[str, str],
                  knownTypes: list[str | None],
@@ -24,12 +20,20 @@ class ToSwiftGenerator(Generator):
         self.knownTypes = knownTypes
         self.knownTypesByName = knownTypesByName
 
-    def messageOpening(self, msg: DescriptorProto,
+
+class ToSwiftGenerator(AuxGenerator):
+    ''' A helper class which makes it possible for the main generator to make
+        two passes on each message using the super processMessage(); this
+        handles the pass for converting the KMM data classes to their Swift
+        implementations, using extensions on the Swift classes. '''
+    def messageOpening(self, prefix: str, msg: DescriptorProto,
                        name: str, indentationLevel: int) -> list[str]:
+        prefix = prefix.replace(".", "")
         typeName = self.typeNameCase(name)
         if typeName.endswith("?"): typeName = typeName[:-1]
-        swiftName = "%s_%s" % (self.packageName, typeName)
-        dataName = "%s.%s" % (self.namespace, typeName)
+        # swiftName = "%s_%s" % (self.packageName, typeName)
+        swiftName = "Self"
+        dataName = "%s%s" % (prefix, typeName)
         indent = "    " * indentationLevel
         return [
             indent + "static func from(data: %s) -> %s {" % \
@@ -81,30 +85,20 @@ class ToSwiftGenerator(Generator):
         return lines
 
 
-class FromSwiftGenerator(Generator):
+class FromSwiftGenerator(AuxGenerator):
     ''' A helper class which makes it possible for the main generator to make
         two passes on each message using the super processMessage(); this
         handles the pass for adding extensions to the Swift message classes to
         convert them to their KMM data counterparts. '''
-    def __init__(self, packageName: str,
-                 namespace: str, options: dict[str, str],
-                 knownTypes: list[str | None],
-                 knownTypesByName: dict[str, str]):
-        super().__init__(baseName="kmm-swift-conv")
-        self.packageName = packageName
-        self.namespace = namespace
-        self.options = options
-        self.knownTypes = knownTypes
-        self.knownTypesByName = knownTypesByName
-    
-    def messageOpening(self, msg: DescriptorProto,
+    def messageOpening(self, prefix: str, msg: DescriptorProto,
                        name: str, indentationLevel: int) -> list[str]:
+        prefix = prefix.replace(".", "")
         typeName = self.typeNameCase(name)
         if typeName.endswith("?"): typeName = typeName[:-1]
         indent = "    " * indentationLevel
         return [
-            indent + "func toData() -> %s.%s {" % (self.namespace, typeName),
-            indent + "    return %s.%s(" % (self.namespace, typeName)
+            indent + "func toData() -> %s%s {" % (self.prefix, typeName),
+            indent + "    return %s%s(" % (self.prefix, typeName)
         ]
     
     def messageClosing(self, msg: DescriptorProto,
@@ -192,22 +186,23 @@ class SwiftConvGenerator(Generator):
                                             self.knownTypesByName)
         return super().getContent(protoFile)
 
-    def processEnum(self, enum: EnumDescriptorProto,
+    def processEnum(self, prefix: str, enum: EnumDescriptorProto,
                     indentationLevel: int) -> list[str]:
+        prefix = prefix.replace(".", "")
         typeName = self.typeNameCase(enum.name)
         swiftName = "%s_%s" % (self.packageName, typeName)
-        companion = "%s.%sCompanion.shared" % (self.namespace, typeName)
+        companion = "%s.%sCompanion.shared" % (prefix, typeName)
         lines = [
             "extension %s {" % swiftName,
-            "    func toData() -> %s.%s {" % (self.namespace, typeName),
+            "    func toData() -> %s%s {" % (prefix, typeName),
             "        return %s.from(value: Int32(rawValue))" % companion,
             "    }",
             "",
             # The Swift constructor here returns an optional, but it can never
             # be nil because missing cases are converted to .UNKNOWN(rawValue)
             # so it's safe to just use ! here.
-            "    static func from(data: %s.%s) -> %s {" % \
-                (self.namespace, typeName, swiftName),
+            "    static func from(data: %s%s) -> %s {" % \
+                (prefix, typeName, swiftName),
             "        return %s(rawValue: Int(data.value))!" % swiftName,
             "    }",
             "}"
@@ -216,7 +211,7 @@ class SwiftConvGenerator(Generator):
         lines = [indent + l for l in lines]
         return lines
 
-    def messageOpening(self, msg: DescriptorProto,
+    def messageOpening(self, prefix: str, msg: DescriptorProto,
                        name: str, indentationLevel: int) -> list[str]:
         typeName = self.typeNameCase(name)
         if typeName.endswith("?"): typeName = typeName[:-1]
@@ -231,14 +226,15 @@ class SwiftConvGenerator(Generator):
         indent = "    " * indentationLevel
         return [ indent + "}" ]
 
-    def processMessage(self, msg: DescriptorProto,
+    def processMessage(self, prefix: str, msg: DescriptorProto,
                        indentationLevel: int) -> list[str]:
         lines = self.messageOpening(msg, msg.name, indentationLevel)
         closing = self.messageClosing(msg, msg.name, indentationLevel)
         indentationLevel += 1
         return lines + \
-            self.fromSwift.processMessage(msg, indentationLevel) + [""] + \
-            self.toSwift.processMessage(msg, indentationLevel) + \
+            self.fromSwift.processMessage(prefix, msg, indentationLevel) + \
+            [""] + \
+            self.toSwift.processMessage(prefix, msg, indentationLevel) + \
             closing
 
     def getFooter(self, protoFile: FileDescriptorProto) -> list[str]:

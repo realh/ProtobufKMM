@@ -58,7 +58,8 @@ with a `toData` instance method and each portable data class and enum is
 extended with a `toProto` instance method.
 
 The output filenames are the same as for `protoc-gen-kmm-data`. They shouldn't
-clash because each generator outputs to a different module.
+clash because each generator outputs to a different module. These files
+belong in `java_package`, not `kmm_package`.
 
 ### protoc-gen-kmm-swift-conv
 

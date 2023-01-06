@@ -235,7 +235,7 @@ class Generator:
         name = self.typeNameCase(msg.name)
         lines = self.messageOpening(msg, prefix, name, indentationLevel)
         indentationLevel += 1
-        prefix += name
+        prefix += "." + name
         for enum in msg.enum_type:
             lines.extend(self.processEnum(prefix, enum, indentationLevel))
             lines.append("")

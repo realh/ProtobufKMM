@@ -1,4 +1,3 @@
-import re
 import sys
 
 from google.protobuf.compiler.plugin_pb2 import \

@@ -11,6 +11,18 @@ class KMMGrpcSharedGenerator(Generator):
     def __init__(self):
         super().__init__(baseName="kmm-grpc-shared")
     
+    def getClientVariety(self):
+        return "Client"
+    
+    def getServiceImports(self, protoFile: FileDescriptorProto,
+                          serv: ServiceDescriptorProto) -> list[str]:
+        lines = super().getServiceImports(protoFile, serv)
+        lines.extend([
+            "import kotlinx.coroutines.flow.Flow",
+            ""
+        ])
+        return lines
+    
     def processMessagesAndEnums(self, protoFile: FileDescriptorProto,
                                 response: CodeGeneratorResponse):
         pass
@@ -18,35 +30,25 @@ class KMMGrpcSharedGenerator(Generator):
     def getOutputFileName(self, protoFileName: str, packageName: str) -> str:
         return self.typeNameCase(packageName) + "GrpcClient.kt"
 
-    def getHeader(self, protoFile: FileDescriptorProto) -> list[str]:
-        return [
-            "package " + self.options["java_package"],
-            "",
-            "import kotlinx.coroutines.flow.Flow",
-            "",
-        ]
-    
     def getFooter(self, protoFile: FileDescriptorProto) -> list[str]:
         return [""]
     
     def getServiceHeader(self, protoFile: FileDescriptorProto,
-                         serv: ServiceDescriptorProto,
-                         indentationLevel: int) -> list[str]:
+                         serv: ServiceDescriptorProto) -> list[str]:
+        lines = super().getServiceHeader(protoFile, serv)
+        protoName = self.typeNameCase(protoFile.package)
         serviceName = self.getServiceName(protoFile, serv)
-        return [
-            "@ObjcName(swiftName = %sKMMGrpcClient)" % serviceName,
-            "interface %sGrpcClient {" % serviceName
+        last = lines.pop()
+        return lines + [
+            "@ObjcName(swiftName = %s_%sKMMGrpcClient)" % \
+                (protoName, serviceName),
+            last
         ]
 
     def getServiceEntity(self):
         ''' "class", "interface" etc for a service definition. '''
         return "interface"
     
-    def getServiceFooter(self, protoFile: FileDescriptorProto,
-                         serv: ServiceDescriptorProto,
-                         indentationLevel: int) -> list[str]:
-        return ["}"]
-
     def getServiceMethod(self, protoFile: FileDescriptorProto,
                         serv: ServiceDescriptorProto,
                         method: MethodDescriptorProto,
@@ -55,9 +57,6 @@ class KMMGrpcSharedGenerator(Generator):
                                         serv,
                                         method,
                                         indentationLevel) + [""]
-    
-    def getRole(self):
-        return "GrpcClient"
 
 
 def main():

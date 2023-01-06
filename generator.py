@@ -84,7 +84,14 @@ class Generator:
             response. It first sets self.options to a dict of the options read
             from protoFile. '''
         self.options = self.getOptions(protoFile)
+        if not self.swift:
+            self.javaPackage = self.options["java_package"]
+            self.kmmPackage = self.parameters.get(
+                "kmm_package",
+                self.javaPackage + ".kmm"
+            )
         self.processMessagesAndEnums(protoFile, response)
+        self.processServices(protoFile, response)
     
     def getOptions(self, protoFile: FileDescriptorProto) -> dict[str, str]:
         ''' Returns a dict of options read from protoFile. '''
@@ -176,7 +183,7 @@ class Generator:
             content = self.processService(protoFile, serv)
             self.addResponseFile(
                 protoFile.package,
-                self.typeNameCase(serv.name) + self.getRole(),
+                self.typeNameCase(serv.name) + "Grpc" + self.getClientVariety(),
                 response,
                 content)
     
@@ -190,11 +197,17 @@ class Generator:
                 "",
             ]
         else:
-            return ["package %s.kmm" % self.options["java_package"], ""]
+            return ["package " + self.kmmPackage, ""]
     
     def getServiceImports(self, protoFile: FileDescriptorProto,
                           serv: ServiceDescriptorProto) -> list[str]:
-        return self.getDataHeader(self, protoFile)
+        lines = self.getDataHeader(self, protoFile)
+        if self.swift:
+            lines = [
+                "import Foundation",
+                "import GRPC",
+            ] + lines
+        return lines
     
     def getDataFooter(self, protoFile: FileDescriptorProto) -> list[str]:
         ''' Gets the last few lines to add to the end of  a file containing one
@@ -222,12 +235,13 @@ class Generator:
         name = self.typeNameCase(msg.name)
         lines = self.messageOpening(msg, prefix, name, indentationLevel)
         indentationLevel += 1
+        prefix += name
         for enum in msg.enum_type:
-            lines.extend(self.processEnum(enum, indentationLevel))
+            lines.extend(self.processEnum(prefix, enum, indentationLevel))
             lines.append("")
         for nested in msg.nested_type:
-            lines.extend(self.processMessage(nested,
-                                             prefix + name,
+            lines.extend(self.processMessage(prefix + name,
+                                             nested,
                                              indentationLevel))
             lines.append("")
         for field in msg.field:
@@ -262,8 +276,6 @@ class Generator:
                          serv: ServiceDescriptorProto) -> list[str]:
         ''' Gets the start of a service definition eg a class. '''
         lines = self.getServiceImports(self, protoFile, serv)
-        if self.swift:
-            lines = ["import GRPC"] + lines
         servName = self.getServiceName(protoFile, serv)
         lines.append("%s %sGrpc%s %s" % (
             self.getServiceEntity(),
@@ -305,7 +317,6 @@ class Generator:
     def getMethodSignature(self, protoFile: FileDescriptorProto,
                            serv: ServiceDescriptorProto,
                            method: MethodDescriptorProto,
-                           indentationLevel: int,
                            withCallbacks = False) -> list[str]:
         ''' Gets a method signature (without opening brace). '''
         if self.swift:
@@ -438,10 +449,16 @@ class Generator:
         return False
     
     def convertTypeName(self, name: str) -> str:
-        ''' Strips any leading qualifier (includes aren't currently supported)
-            and applies self.typeNameCase. '''
+        ''' Strips any leading qualifier (includes aren't currently supported),
+            applies self.typeNameCase. '''
         if name.startswith("."):
-            name = re.sub(r"^\.[a-zA-Z0-9_]*\.", "", name)
+            name = name.split(".")
+            if self.swift:
+                prefix = name[1]
+                name = "".join(name[2:])
+                return self.typeNameCase(prefix) + self.typeNameCase(name)
+            else:
+                name = ".".join(name[2:])
         return self.typeNameCase(name)
 
     def getBuiltInTypeByNumber(self, number: int) -> str | None:

@@ -3,7 +3,6 @@
 from google.protobuf.compiler.plugin_pb2 import CodeGeneratorResponse
 from google.protobuf.descriptor_pb2 import \
     FileDescriptorProto, \
-    EnumDescriptorProto, DescriptorProto, \
     ServiceDescriptorProto, MethodDescriptorProto
 
 from generator import Generator
@@ -12,30 +11,24 @@ class KMMGrpcAndroidGenerator(Generator):
     def __init__(self):
         super().__init__(baseName="kmm-grpc-android")
     
-    def getOutputFileName(self, protoFileName: str, packageName: str) -> str:
-        return self.typeNameCase(packageName) + "GrpcAndroidClient.kt"
-
     def processMessagesAndEnums(self, protoFile: FileDescriptorProto,
                                 response: CodeGeneratorResponse):
         pass
 
     def getServiceImports(self, protoFile: FileDescriptorProto,
                           serv: ServiceDescriptorProto) -> list[str]:
-        pkg = self.options["java_package"]
         importFlow = "import kotlinx.coroutines.flow."
-        lines = [
-            "package %s.kmm" % pkg,
-            "",
+        lines = super().getServiceImports(protoFile, serv)
+        lines.extend([
             importFlow + "Flow",
             importFlow + "map",
             # Not sure if service.name is the whole story, but it should be
             # an easy fix if not.
-            "import %s.%sGrpcKt.%sCoroutineStub" % (pkg, serv.name, serv.name),
+            "import %s.%sGrpcKt.%sCoroutineStub" % \
+                (self.javaPackage, serv.name, serv.name),
             ""
-        ]
-    
-    def getFooter(self, protoFile: FileDescriptorProto) -> list[str]:
-        return [""]
+        ])
+        return lines
     
     def getServiceHeader(self, protoFile: FileDescriptorProto,
                          serv: ServiceDescriptorProto) -> list[str]:
@@ -55,11 +48,9 @@ class KMMGrpcAndroidGenerator(Generator):
     def getServiceMethod(self, protoFile: FileDescriptorProto,
                         serv: ServiceDescriptorProto,
                         method: MethodDescriptorProto) -> list[str]:
-        indentationLevel += 1
         lines = self.getMethodSignature(protoFile,
                                         serv,
-                                        method,
-                                        indentationLevel)
+                                        method)
         indent = "    "
         lines[0] = indent + "override " + lines[0][4:]
         lines[-1] += " ="

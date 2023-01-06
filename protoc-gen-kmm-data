@@ -47,7 +47,7 @@ class KtDataGenerator(Generator):
                        indentationLevel: int) -> list[str]:
         indent = "    " * indentationLevel
         return [
-            indent + '@ObjCName(swiftName = "%s")' % prefix,
+            indent + '@ObjCName(swiftName = "%s%s")' % (prefix, name),
             indent + "data class %s(" % name,
         ]
 

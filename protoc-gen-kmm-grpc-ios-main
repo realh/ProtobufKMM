@@ -8,90 +8,58 @@ from google.protobuf.compiler.plugin_pb2 import \
 
 from google.protobuf.descriptor_pb2 import \
     FileDescriptorProto, \
-    EnumDescriptorProto, DescriptorProto, \
     ServiceDescriptorProto, MethodDescriptorProto
 
 from generator import Generator
 
-class KMMGrpcIosHelperGenerator(Generator):
-    ''' Generates GrpcIosClientHelper.kt by copying the template file. '''
-    def __init__(self, namespace: str, options: dict[str, str]):
+class AuxGenerator(Generator):
+    def __init__(self, namespace: str, options: dict[str, str],
+                 kmmPackage: str):
         super().__init__(baseName="kmm-grpc-ios-main")
         self.namespace = namespace
         self.options = options
+        self.kmmPackage = kmmPackage
 
-    def process(self, req: CodeGeneratorRequest) -> CodeGeneratorResponse:
-        ''' We only want to create one GrpcIosClientHelper. This generator must
-            be run last. '''
-        req.proto_file = [req.proto_file[0]]
-        return super().process(req)
 
-    def getContent(self, protoFile: FileDescriptorProto) -> str:
+class KMMGrpcIosHelperGenerator(AuxGenerator):
+    ''' Generates GrpcIosClientHelper.kt by copying the template file. '''
+    def addHelper(self, response: CodeGeneratorResponse):
         inputName = os.path.join(os.path.dirname(sys.argv[0]),
                                  "GrpcIosClientHelper.kt")
         f = open(inputName, "r")
         template = str(f.read())
         f.close()
-        package = self.options.get("java_package")
-        if package is not None:
-            template = template.replace("package org.example.proto",
-                                        "package " + package)
-        return template
+        template = template.replace("package org.example.proto",
+                                    "package " + self.kmmPackage)
+        self.addResponseFile("", "",
+                             response,
+                             template.split("\n"))
+        return response
 
-    def getOutputFileName(self, protoFileName: str, packageName: str) -> str:
-        return "GrpcIosClientHelper.kt"
-
+    def getClientVariety(self):
+        return "IosClientHelper"
     
-class KMMGrpcIosDelegateGenerator(Generator):
+    
+class KMMGrpcIosDelegateGenerator(AuxGenerator):
     ''' Generates the Kotlin interface for the delegate which is actually
         implemented in Swift. '''
-    def __init__(self, namespace: str, options: dict[str, str]):
-        super().__init__(baseName="kmm-grpc-ios-main")
-        self.namespace = namespace
-        self.options = options
+    def getClientVariety(self):
+        return "IosDelegate"
+
+    def processMessagesAndEnums(self, protoFile: FileDescriptorProto,
+                                response: CodeGeneratorResponse):
+        pass
+
+    def getServiceEntity(self):
+        return "interface"
     
-    def getOutputFileName(self, protoFileName: str, packageName: str) -> str:
-        return self.typeNameCase(packageName) + "GrpcIosDelegate.kt"
-
-    def processEnum(self, enum: EnumDescriptorProto,
-                    indentationLevel: int) -> list[str]:
-        return []
-
-    def processMessage(self, msg: DescriptorProto,
-                       indentationLevel: int) -> list[str]:
-        return []
-
-    def getHeader(self, protoFile: FileDescriptorProto) -> list[str]:
-        return [
-            "package " + self.options["java_package"],
-            "",
-        ]
-    
-    def getFooter(self, protoFile: FileDescriptorProto) -> list[str]:
-        return [""]
-    
-    def getServiceHeader(self, protoFile: FileDescriptorProto,
-                         serv: ServiceDescriptorProto,
-                         indentationLevel: int) -> list[str]:
-        serviceName = self.getServiceName(protoFile, serv)
-        return [
-            "interface %sGrpcIosDelegate {" % serviceName
-        ]
-
-    def getServiceFooter(self, protoFile: FileDescriptorProto,
-                         serv: ServiceDescriptorProto,
-                         indentationLevel: int) -> list[str]:
-        return ["}"]
-
     def getServiceMethod(self, protoFile: FileDescriptorProto,
                         serv: ServiceDescriptorProto,
-                        method: MethodDescriptorProto,
-                        indentationLevel: int) -> list[str]:
+                        method: MethodDescriptorProto) -> list[str]:
         return self.getMethodSignature(
             protoFile,
             serv,
             method,
-            indentationLevel,
             withCallbacks=True
         ) + [""]
 
@@ -104,67 +72,54 @@ class KMMGrpcIosDelegateGenerator(Generator):
         return ""
         
 
-class KMMGrpcIosClientGenerator(Generator):
+class KMMGrpcIosClientGenerator(AuxGenerator):
     ''' Generates the GrpcIosClient (Kotlin, implementing the shared interface).
     '''
-    def __init__(self, namespace: str, options: dict[str, str]):
+    def __init__(self, namespace: str, options: dict[str, str],
+                 kmmPackage: str):
         super().__init__(baseName="kmm-grpc-ios-main")
         self.namespace = namespace
         self.options = options
+        self.kmmPackage = kmmPackage
     
     def processMessagesAndEnums(self, protoFile: FileDescriptorProto,
                                 response: CodeGeneratorResponse):
         pass
     
-    def getOutputFileName(self, protoFileName: str, packageName: str) -> str:
-        return self.typeNameCase(packageName) + "GrpcIosClient.kt"
+    def getClientVariety(self):
+        return "IosClient"
 
-    def getHeader(self, protoFile: FileDescriptorProto) -> list[str]:
-        pkg = self.options["java_package"]
-        importHelper = "import %s.GrpcIosClientHelper" % pkg
-        return [
-            "package " + pkg,
-            "",
+    def getServiceImports(self, protoFile: FileDescriptorProto,
+                          serv: ServiceDescriptorProto) -> list[str]:
+        lines = super().getServiceImports(protoFile, serv)
+        importHelper = "import %s.GrpcIosClientHelper" % self.kmmPackage
+        lines.extend([
             "import kotlinx.coroutines.flow.Flow",
             importHelper + ".unaryCall",
             importHelper + ".serverStreamingCall",
             importHelper + ".clientStreamingCall",
             importHelper + ".bidirectionalStreamingCall",
             "",
-        ]
-    
-    def getFooter(self, protoFile: FileDescriptorProto) -> list[str]:
-        return [""]
+        ])
+        return lines
     
     def getServiceHeader(self, protoFile: FileDescriptorProto,
-                         serv: ServiceDescriptorProto,
-                         indentationLevel: int) -> list[str]:
+                         serv: ServiceDescriptorProto) -> list[str]:
         serviceName = self.getServiceName(protoFile, serv)
-        indent = "    " * indentationLevel
         return [
-            indent + "class %sGrpcIosClient (" % serviceName,
-            indent + "    private val delegate: %sGrpcIosDelegate" % \
-                serviceName,
-            indent + "): %sGrpcClient {" % serviceName,
+            "class %sGrpcIosClient (" % serviceName,
+            "    private val delegate: %sGrpcIosDelegate" % serviceName,
+            "): %sGrpcClient {" % serviceName,
         ]
-
-    def getServiceFooter(self, protoFile: FileDescriptorProto,
-                         serv: ServiceDescriptorProto,
-                         indentationLevel: int) -> list[str]:
-        return ["}"]
 
     def getServiceMethod(self, protoFile: FileDescriptorProto,
                         serv: ServiceDescriptorProto,
-                        method: MethodDescriptorProto,
-                        indentationLevel: int) -> list[str]:
-        indentationLevel += 1
+                        method: MethodDescriptorProto) -> list[str]:
         lines = self.getMethodSignature(protoFile,
                                         serv,
                                         method,
-                                        indentationLevel,
                                         withCallbacks=False)
-        indent = "    " * indentationLevel
-        lines[0] = indent + "override " + lines[0][4:]
+        lines[0] = "override " + lines[0][4:]
         lines[-1] += " = "
         methodName = self.memberCase(method.name)
         if method.client_streaming and method.server_streaming:
@@ -179,8 +134,8 @@ class KMMGrpcIosClientGenerator(Generator):
         else:
             lines[-1] += "unaryCall {"
             body = "delegate.%s(request, it)"
-        lines.append(indent + "    " + body % methodName)
-        lines.extend([indent + "}", ""])
+        lines.append("        " + body % methodName)
+        lines.extend(["    }", ""])
         return lines
 
 
@@ -188,14 +143,22 @@ class KMMGrpcIosMainGenerator(Generator):
     def __init__(self):
         super().__init__(baseName="kmm-grpc-ios-main")
     
+    def process(self, req: CodeGeneratorRequest) -> CodeGeneratorResponse:
+        response = super.process(req)
+        helperGenerator = KMMGrpcIosHelperGenerator(self.namespace, {},
+                                                    self.kmmPackage)
+        helperGenerator.addHelper(response)
+        return response
+
     def processFile(self, protoFile: FileDescriptorProto,
                     response: CodeGeneratorResponse):
         self.options = self.getOptions(protoFile)
         self.namespace = self.getNamespace(protoFile)
         for generator in (
-                KMMGrpcIosDelegateGenerator(self.namespace, self.options),
-                KMMGrpcIosClientGenerator(self.namespace, self.options),
-                KMMGrpcIosHelperGenerator(self.namespace, self.options),
+                KMMGrpcIosDelegateGenerator(self.namespace,
+                                            self.options, self.kmmPackage),
+                KMMGrpcIosClientGenerator(self.namespace,
+                                          self.options, self.kmmPackage),
         ):
             generator.processFile(protoFile, response)
     

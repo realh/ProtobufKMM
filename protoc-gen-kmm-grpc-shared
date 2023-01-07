@@ -33,18 +33,6 @@ class KMMGrpcSharedGenerator(Generator):
     def getFooter(self, protoFile: FileDescriptorProto) -> list[str]:
         return [""]
     
-    def getServiceHeader(self, protoFile: FileDescriptorProto,
-                         serv: ServiceDescriptorProto) -> list[str]:
-        lines = super().getServiceHeader(protoFile, serv)
-        protoName = self.typeNameCase(protoFile.package)
-        serviceName = self.getServiceName(protoFile, serv)
-        last = lines.pop()
-        return lines + [
-            "@ObjcName(swiftName = %s_%sKMMGrpcClient)" % \
-                (protoName, serviceName),
-            last
-        ]
-
     def getServiceEntity(self):
         ''' "class", "interface" etc for a service definition. '''
         return "interface"

@@ -19,7 +19,6 @@ class KtDataGenerator(Generator):
         enumName = self.typeNameCase(enum.name)
         indent = "    " * indentationLevel
         lines = [
-            indent + '@ObjCName(swiftName = "%s%s")' % (prefix, enumName),
             indent + "enum class %s(val value: Int) {" % \
                 self.typeNameCase(enum.name)]
         indent += "    "
@@ -50,7 +49,6 @@ class KtDataGenerator(Generator):
         prefix = prefix.replace(".", "")
         indent = "    " * indentationLevel
         return [
-            indent + '@ObjCName(swiftName = "%s%s")' % (prefix, name),
             indent + "data class %s(" % name,
         ]
 

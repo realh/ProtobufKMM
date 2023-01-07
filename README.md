@@ -46,9 +46,6 @@ Generates Kotlin data classes and enum classes for the protobuf messages and
 enums. Designed to be used in your shared module with minimum fuss. This
 outputs one file per message/enum.
 
-The generated classes are given `@ObjCName` annotations to avoid name clashes
-when imported into Swift.
-
 ### protoc-gen-kmm-jvm-conv
 
 Generates Kotlin class extensions in the Android module which convert the

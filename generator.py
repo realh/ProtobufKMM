@@ -135,7 +135,7 @@ class Generator:
                                 response: CodeGeneratorResponse):
         ''' Processes messages and enums in protoFile. In Swift there is
             one output file, in Kotlin there is one per message/enum. '''
-        protoName = self.typeNameCase(protoFile.name)
+        protoName = self.packageName
         if self.swift:
             content = self.getDataHeader(protoFile)
         indentationLevel = 0
@@ -243,7 +243,7 @@ class Generator:
             lines.extend(self.processEnum(prefix, enum, indentationLevel))
             lines.append("")
         for nested in msg.nested_type:
-            lines.extend(self.processMessage(prefix + name,
+            lines.extend(self.processMessage(prefix,
                                              nested,
                                              indentationLevel))
             lines.append("")

@@ -26,6 +26,8 @@ class KMMGrpcAndroidGenerator(Generator):
             # an easy fix if not.
             "import %s.%sGrpcKt.%sCoroutineStub" % \
                 (self.javaPackage, serv.name, serv.name),
+            "import %s.toData" % self.javaPackage,
+            "import %s.toProto" % self.javaPackage,
             ""
         ])
         return lines

@@ -107,6 +107,12 @@ services. It contains a generic interface and methods to bridge between
 type of rpc call (unary, client-streaming, server-streaming,
 bidirectional-streaming).
 
+`GrpcIosClientHelper` can be shared between all clients, so it has a package of
+its own (but it's OK if it's the same as `kmm_package` or `java_package`) which
+must be specified with the `helper_package` parameter, eg:
+
+`--kmm-grpc-ios-main_opt=helper_package='org.example.proto'`.
+
 ### protoc-gen-kmm-grpc-swift
 
 Generates `ProtoPackageGrpcIosDelegate.swift` in the Xcode project. It contains

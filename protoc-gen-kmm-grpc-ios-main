@@ -13,10 +13,8 @@ from google.protobuf.descriptor_pb2 import \
 from generator import Generator
 
 class AuxGenerator(Generator):
-    def __init__(self, options: dict[str, str], kmmPackage: str):
+    def __init__(self):
         super().__init__(baseName="kmm-grpc-ios-main")
-        self.options = options
-        self.kmmPackage = kmmPackage
 
 
 class KMMGrpcIosHelperGenerator(AuxGenerator):
@@ -27,8 +25,9 @@ class KMMGrpcIosHelperGenerator(AuxGenerator):
         f = open(inputName, "r")
         template = str(f.read())
         f.close()
+        helperPkg = self.parameters["helper_package"]
         template = template.replace("package org.example.proto",
-                                    "package " + self.kmmPackage)
+                                    "package " + helperPkg)
         file = response.file.add()
         file.name = "GrpcIosClientHelper.kt"
         file.content = template
@@ -82,7 +81,8 @@ class KMMGrpcIosClientGenerator(AuxGenerator):
     def getServiceImports(self, protoFile: FileDescriptorProto,
                           serv: ServiceDescriptorProto) -> list[str]:
         lines = super().getServiceImports(protoFile, serv)
-        importHelper = "import %s.GrpcIosClientHelper" % self.kmmPackage
+        helperPkg = self.parameters["helper_package"]
+        importHelper = "import %s.GrpcIosClientHelper" % helperPkg
         lines.extend([
             "import kotlinx.coroutines.flow.Flow",
             importHelper + ".unaryCall",
@@ -96,11 +96,14 @@ class KMMGrpcIosClientGenerator(AuxGenerator):
     def getServiceHeader(self, protoFile: FileDescriptorProto,
                          serv: ServiceDescriptorProto) -> list[str]:
         serviceName = self.getServiceName(protoFile, serv)
-        return [
-            "class %sGrpcIosClient (" % serviceName,
+        lines = super().getServiceHeader(protoFile, serv)
+        return lines + [
             "    private val delegate: %sGrpcIosDelegate" % serviceName,
             "): %sGrpcClient {" % serviceName,
         ]
+
+    def getServiceOpenBracket(self):
+        return "("
 
     def getServiceMethod(self, protoFile: FileDescriptorProto,
                         serv: ServiceDescriptorProto,
@@ -109,7 +112,7 @@ class KMMGrpcIosClientGenerator(AuxGenerator):
                                         serv,
                                         method,
                                         withCallbacks=False)
-        lines[0] = "override " + lines[0][4:]
+        lines[0] = "    override " + lines[0][4:]
         lines[-1] += " = "
         methodName = self.memberCase(method.name)
         if method.client_streaming and method.server_streaming:
@@ -132,6 +135,9 @@ class KMMGrpcIosClientGenerator(AuxGenerator):
 class KMMGrpcIosMainGenerator(Generator):
     def __init__(self):
         super().__init__(baseName="kmm-grpc-ios-main")
+        self.helperGenerator = KMMGrpcIosHelperGenerator()
+        self.delegateGenerator = KMMGrpcIosDelegateGenerator()
+        self.clientGenerator = KMMGrpcIosClientGenerator()
     
     def processMessagesAndEnums(self, protoFile: FileDescriptorProto,
                                 response: CodeGeneratorResponse):
@@ -139,18 +145,10 @@ class KMMGrpcIosMainGenerator(Generator):
 
     def process(self, req: CodeGeneratorRequest,
                 response: CodeGeneratorResponse):
-        super().process(req, response)
-        helperGenerator = KMMGrpcIosHelperGenerator({}, self.kmmPackage)
-        helperGenerator.addHelper(response)
-
-    def processFile(self, protoFile: FileDescriptorProto,
-                    response: CodeGeneratorResponse):
-        self.loadOptions(protoFile)
-        for generator in (
-            KMMGrpcIosDelegateGenerator(self.options, self.kmmPackage),
-            KMMGrpcIosClientGenerator(self.options, self.kmmPackage),
-        ):
-            generator.processFile(protoFile, response)
+        self.helperGenerator.loadParameters(req)
+        self.helperGenerator.addHelper(response)
+        self.delegateGenerator.process(req, response)
+        self.clientGenerator.process(req, response)
     
 
 def main():

@@ -132,15 +132,23 @@ This set of plugins was written to support a specific app, which needs to be
 completed ASAP. I don't have time to work on protobuf features it doesn't use,
 which include:
 
-* gRPC servers
+* gRPC servers.
 * Nested messages and enums (might work, but not tested).
 * Includes.
 * Extensions.
-* `oneof` types
+* `oneof` types.
 
 So these plugins will generate incorrect code for them.
 
-Also, bidirectional streaming methods are untested.
+Other issues: 
+
+* Bidirectional streaming methods are untested.
+* Data/enum class names are unqualified so may clash in Swift/ObjC.
+
+I tried to fix the name clashes by using `@ObjCName`, but the annotation
+doesn't actually exist. If name clashes are a problem you will have to alter
+the generators to qualify the name in Kotlin as well as in Swift/Objective C
+and add unqualified aliases to Kotlin.
 
 However, this code is sufficiently simple and well-documented that I think a
 third party wouldn't find it too difficult to add/fix those features if they

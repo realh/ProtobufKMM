@@ -17,7 +17,7 @@ class AuxGenerator(Generator):
         but defer the actual processing to the owner. '''
     def __init__(self,knownTypes: list[str | None],
                  knownTypesByName: dict[str, str]):
-        super().__init__(baseName="kmm-swift-conv")
+        super().__init__(baseName="kmm-swift-conv", swift=True)
         self.knownTypes = knownTypes
         self.knownTypesByName = knownTypesByName
 
@@ -31,9 +31,9 @@ class ToSwiftGenerator(AuxGenerator):
         prefix = prefix.replace(".", "")
         typeName = self.typeNameCase(name)
         if typeName.endswith("?"): typeName = typeName[:-1]
-        # swiftName = "%s_%s" % (self.packageName, typeName)
-        swiftName = "Self"
-        dataName = "%s%s" % (prefix, typeName)
+        swiftName = "%s_%s" % (self.packageName, typeName)
+        #dataName = "%s%s" % (prefix, typeName)
+        dataName = typeName
         indent = "    " * indentationLevel
         return [
             indent + "static func from(data: %s) -> %s {" % \
@@ -95,10 +95,12 @@ class FromSwiftGenerator(AuxGenerator):
         prefix = prefix.replace(".", "")
         typeName = self.typeNameCase(name)
         if typeName.endswith("?"): typeName = typeName[:-1]
+        #dataName = "%s%s {" % (prefix, typeName),
+        dataName = typeName
         indent = "    " * indentationLevel
         return [
-            indent + "func toData() -> %s%s {" % (prefix, typeName),
-            indent + "    return %s%s(" % (prefix, typeName)
+            indent + "func toData() -> %s {" % dataName,
+            indent + "    return %s(" % dataName,
         ]
     
     def messageClosing(self, msg: DescriptorProto,
@@ -136,7 +138,7 @@ class FromSwiftGenerator(AuxGenerator):
 
 class SwiftConvGenerator(Generator):
     def __init__(self):
-        super().__init__(baseName="kmm-swift-conv")
+        super().__init__(baseName="kmm-swift-conv", swift=True)
         self.knownTypes = (
             None,
             "Double", "Float", "Int64", "UInt64", "Int32",
@@ -188,18 +190,18 @@ class SwiftConvGenerator(Generator):
         prefix = prefix.replace(".", "")
         typeName = self.typeNameCase(enum.name)
         swiftName = "%s_%s" % (self.packageName, typeName)
-        companion = "%s.%sCompanion.shared" % (prefix, typeName)
+        dataName = "%s" % typeName
+        companion = "%s.Companion.shared" % dataName
         lines = [
             "extension %s {" % swiftName,
-            "    func toData() -> %s%s {" % (prefix, typeName),
+            "    func toData() -> %s {" % dataName,
             "        return %s.from(value: Int32(rawValue))" % companion,
             "    }",
             "",
             # The Swift constructor here returns an optional, but it can never
             # be nil because missing cases are converted to .UNKNOWN(rawValue)
             # so it's safe to just use ! here.
-            "    static func from(data: %s%s) -> %s {" % \
-                (prefix, typeName, swiftName),
+            "    static func from(data: %s) -> %s {" % (dataName, swiftName),
             "        return %s(rawValue: Int(data.value))!" % swiftName,
             "    }",
             "}"

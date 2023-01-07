@@ -16,6 +16,7 @@ class KMMGrpcSwiftGenerator(Generator):
     def process(self, req: CodeGeneratorRequest,
                 response: CodeGeneratorResponse):
         super().process(req, response)
+        self.helperGenerator.loadParameters(req)
         self.helperGenerator.addHelper(response)
 
     def processMessagesAndEnums(self, protoFile: FileDescriptorProto,
@@ -48,7 +49,9 @@ class KMMGrpcSwiftGenerator(Generator):
                         method: MethodDescriptorProto) -> list[str]:
         protoPrefix = self.typeNameCase(protoFile.package)
         reqType = self.convertTypeName(method.input_type)
+        swiftReqType = "%s_%s" % (protoPrefix, reqType)
         resultType = self.convertTypeName(method.output_type)
+        swiftResultType = "%s_%s" % (protoPrefix, resultType)
         methodName = self.memberCase(method.name)
         lines = self.getMethodSignature(protoFile,
                                         serv,
@@ -59,9 +62,13 @@ class KMMGrpcSwiftGenerator(Generator):
                 "let call = client.%s()" % methodName,
             ]
         else:
+            if method.server_streaming:
+                receiver = "_"
+            else:
+                receiver = "let call"
             body = [
-                "let req = %s_%s.from(data: request)" % (protoPrefix, reqType),
-                "let call = client.%s(req)" % methodName
+                "let req = %s.from(data: request)" % swiftReqType,
+                "%s = client.%s(req)" % (receiver, methodName)
             ]
         if method.server_streaming:
             body[-1] += " {"
@@ -78,10 +85,10 @@ class KMMGrpcSwiftGenerator(Generator):
             ]
         if method.client_streaming:
             body += [
-                "return GrpcClientStreamer(call) {",
+                "return GrpcClientStreamer<%s, %s>(call) {" % \
+                    (swiftReqType, swiftResultType),
                 "    guard let data = $0 as? %s else { return nil }" % reqType,
-                "    return %s_%s.from(data: data)" % \
-                    (protoPrefix, reqType),
+                "    return %s.from(data: data)" % swiftReqType,
                 "}"
             ]
         body = ["        " + l for l in body]
@@ -94,9 +101,9 @@ class KMMGrpcClientStreamerGenerator(Generator):
         super().__init__(baseName="kmm-grpc-swift", swift=True)
     
     def addHelper(self, response: CodeGeneratorResponse):
-        self.addResponseFile("", "",
-                             response,
-                             streamerCode.split("\n"))
+        lines = streamerCode.split("\n")
+        lines = ["import " + self.sharedModule] + lines
+        self.addResponseFile("", "", response, lines)
         return response
 
     def getOutputFilenameForClass(self, protoName: str,
@@ -109,7 +116,7 @@ class KMMGrpcClientStreamerGenerator(Generator):
 
 streamerCode = '''import GRPC
 
-private class GrpcClientStreamer<T, R>: GrpcIosClientHelperClientStreamer {
+class GrpcClientStreamer<T, R>: GrpcIosClientHelperClientStreamer {
     let call: ClientStreamingCall<T, R>
     let converter: (Any?)->T?
     

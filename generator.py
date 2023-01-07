@@ -83,6 +83,7 @@ class Generator:
             self.parameters = { p[0]: p[1] for p in parameters }
         else:
             self.parameters = {}
+        self.sharedModule = self.parameters.get("shared_module", "shared")
     
     def processProtoFile(self, protoFile: FileDescriptorProto,
                          response: CodeGeneratorResponse):
@@ -197,9 +198,8 @@ class Generator:
         ''' Gets the first few lines to start a file containing one or many
             messages/enums. '''
         if self.swift:
-            shared = self.parameters.get("shared_module", "shared")
             return [
-                "import " + str(shared),
+                "import " + str(self.sharedModule),
                 "",
             ]
         else:
@@ -473,9 +473,14 @@ class Generator:
         if name.startswith("."):
             name = name.split(".")
             if self.swift:
+                # @ObjCName is a fabrication, so Swift/ObjC names have to be
+                # the same as Kotlin.
+                name = "".join(name[2:])
+                '''
                 prefix = name[1]
                 name = "".join(name[2:])
                 return self.typeNameCase(prefix) + self.typeNameCase(name)
+                '''
             else:
                 name = ".".join(name[2:])
         return self.typeNameCase(name)

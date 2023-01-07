@@ -29,10 +29,9 @@ class KMMGrpcIosHelperGenerator(AuxGenerator):
         f.close()
         template = template.replace("package org.example.proto",
                                     "package " + self.kmmPackage)
-        self.addResponseFile("", "",
-                             response,
-                             template.split("\n"))
-        return response
+        file = response.file.add()
+        file.name = "GrpcIosClientHelper.kt"
+        file.content = template
 
     def getClientVariety(self):
         return "IosClientHelper"

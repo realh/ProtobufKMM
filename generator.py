@@ -1,7 +1,7 @@
 import sys
 
 from google.protobuf.compiler.plugin_pb2 import \
-    CodeGeneratorRequest, CodeGeneratorResponse, File
+    CodeGeneratorRequest, CodeGeneratorResponse
 from google.protobuf.descriptor_pb2 import \
     FileDescriptorProto, \
     EnumDescriptorProto, DescriptorProto, \
@@ -56,49 +56,53 @@ class Generator:
         '''
         input = sys.stdin.buffer.read()
         req = CodeGeneratorRequest.FromString(input)
-        response = self.process(req)
+        response = CodeGeneratorResponse()
+        self.process(req, response)
         output = response.SerializeToString()
         sys.stdout.buffer.write(output)
     
-    def process(self, req: CodeGeneratorRequest) -> CodeGeneratorResponse:
-        ''' Processes a CodeGeneratorRequest and generates a
+    def process(self, req: CodeGeneratorRequest,
+                response: CodeGeneratorResponse):
+        ''' Processes a CodeGeneratorRequest and adds to a
             CodeGeneratorResponse by calling self.processFile() for each proto
             file in req.
             It also parses the request's `parameter` field, generating a dict
             available in self.parameters.
             '''
-        response = CodeGeneratorResponse()
+        self.loadParameters(req)
+        for f in req.proto_file:
+            self.processProtoFile(f, response)
+    
+    def loadParameters(self, req: CodeGeneratorRequest):
+        ''' Loads parameters from a request. '''
         if len(req.parameter) > 0:
             parameters = (p.split("=") for p in req.parameter.split(","))
             self.parameters = { p[0]: p[1] for p in parameters }
         else:
             self.parameters = {}
-        for f in req.proto_file:
-            self.processProtoFile(f, response)
-        return response
     
     def processProtoFile(self, protoFile: FileDescriptorProto,
                          response: CodeGeneratorResponse):
         ''' Processes each proto file, adding a new set of output files to the
             response. It first sets self.options to a dict of the options read
             from protoFile. '''
-        self.options = self.getOptions(protoFile)
+        self.loadOptions(protoFile)
+        self.processMessagesAndEnums(protoFile, response)
+        self.processServices(protoFile, response)
+    
+    def loadOptions(self, protoFile: FileDescriptorProto):
+        ''' Assigns self.options etc read from protoFile . '''
+        self.packageName = self.typeNameCase(protoFile.package)
+        lines = str(protoFile.options).strip().split("\n")
+        options = (l.split(": ") for l in lines)
+        kvs = ((i[0], i[1].replace('"', "")) for i in options)
+        self.options = dict(i for i in kvs)
         if not self.swift:
             self.javaPackage = self.options["java_package"]
             self.kmmPackage = self.parameters.get(
                 "kmm_package",
                 self.javaPackage + ".kmm"
             )
-        self.processMessagesAndEnums(protoFile, response)
-        self.processServices(protoFile, response)
-    
-    def getOptions(self, protoFile: FileDescriptorProto) -> dict[str, str]:
-        ''' Returns a dict of options read from protoFile. '''
-        lines = str(protoFile.options).strip().split("\n")
-        options = (l.split(": ") for l in lines)
-        kvs = ((i[0], i[1].replace('"', "")) for i in options)
-        optsDict = dict(i for i in kvs)
-        return optsDict
 
     def getOutputFilenameForClass(self, protoName: str,
                                   className: str) -> str:
@@ -200,7 +204,7 @@ class Generator:
     
     def getServiceImports(self, protoFile: FileDescriptorProto,
                           serv: ServiceDescriptorProto) -> list[str]:
-        lines = self.getDataHeader(self, protoFile)
+        lines = self.getDataHeader(protoFile)
         if self.swift:
             lines = [
                 "import Foundation",
@@ -232,7 +236,7 @@ class Generator:
             spaces multiplied by indentationLevel. prefix is derived from the
             proto package name, followed by parent messages when nested. '''
         name = self.typeNameCase(msg.name)
-        lines = self.messageOpening(msg, prefix, name, indentationLevel)
+        lines = self.messageOpening(prefix, msg, name, indentationLevel)
         indentationLevel += 1
         prefix += "." + name
         for enum in msg.enum_type:
@@ -274,7 +278,7 @@ class Generator:
     def getServiceHeader(self, protoFile: FileDescriptorProto,
                          serv: ServiceDescriptorProto) -> list[str]:
         ''' Gets the start of a service definition eg a class. '''
-        lines = self.getServiceImports(self, protoFile, serv)
+        lines = self.getServiceImports(protoFile, serv)
         servName = self.getServiceName(protoFile, serv)
         lines.append("%s %sGrpc%s %s" % (
             self.getServiceEntity(),

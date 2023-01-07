@@ -40,11 +40,6 @@ class KMMGrpcAndroidGenerator(Generator):
         ])
         return lines
 
-    def getServiceFooter(self, protoFile: FileDescriptorProto,
-                         serv: ServiceDescriptorProto,
-                         indentationLevel: int) -> list[str]:
-        return ["}"]
-
     def getServiceMethod(self, protoFile: FileDescriptorProto,
                         serv: ServiceDescriptorProto,
                         method: MethodDescriptorProto) -> list[str]:

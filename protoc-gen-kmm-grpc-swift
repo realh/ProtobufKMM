@@ -13,10 +13,10 @@ class KMMGrpcSwiftGenerator(Generator):
         super().__init__(baseName="kmm-grpc-swift", swift=True)
         self.helperGenerator = KMMGrpcClientStreamerGenerator()
     
-    def process(self, req: CodeGeneratorRequest) -> CodeGeneratorResponse:
-        response = super.process(req)
+    def process(self, req: CodeGeneratorRequest,
+                response: CodeGeneratorResponse):
+        super().process(req, response)
         self.helperGenerator.addHelper(response)
-        return response
 
     def processMessagesAndEnums(self, protoFile: FileDescriptorProto,
                                 response: CodeGeneratorResponse):
@@ -45,16 +45,14 @@ class KMMGrpcSwiftGenerator(Generator):
 
     def getServiceMethod(self, protoFile: FileDescriptorProto,
                         serv: ServiceDescriptorProto,
-                        method: MethodDescriptorProto,
-                        indentationLevel: int) -> list[str]:
+                        method: MethodDescriptorProto) -> list[str]:
         protoPrefix = self.typeNameCase(protoFile.package)
         reqType = self.convertTypeName(method.input_type)
         resultType = self.convertTypeName(method.output_type)
         methodName = self.memberCase(method.name)
         lines = self.getMethodSignature(protoFile,
                                         serv,
-                                        method,
-                                        indentationLevel)
+                                        method)
         lines[-1] += " {"
         if method.client_streaming:
             body = [

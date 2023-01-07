@@ -51,12 +51,11 @@ class KMMGrpcSharedGenerator(Generator):
     
     def getServiceMethod(self, protoFile: FileDescriptorProto,
                         serv: ServiceDescriptorProto,
-                        method: MethodDescriptorProto,
-                        indentationLevel: int) -> list[str]:
+                        method: MethodDescriptorProto) -> list[str]:
         return self.getMethodSignature(protoFile,
                                         serv,
                                         method,
-                                        indentationLevel) + [""]
+                                       ) + [""]
 
 
 def main():

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
-from google.protobuf.compiler.plugin_pb2 import CodeGeneratorResponse
+from google.protobuf.compiler.plugin_pb2 import \
+    CodeGeneratorRequest, CodeGeneratorResponse
 from google.protobuf.descriptor_pb2 import \
     FileDescriptorProto, \
     EnumDescriptorProto, DescriptorProto, \
@@ -9,17 +10,16 @@ from google.protobuf.descriptor_pb2 import \
 from generator import Generator
 
 class AuxGenerator(Generator):
-    def __init__(self, packageName: str,
-                 namespace: str, options: dict[str, str],
-                 knownTypes: list[str | None],
+    ''' Base for a helper class which makes it possible for an owner generator
+        to make two passes on each message and enum. It has empty
+        processMessagesAndEnums and processServices so that its super
+        implementation of Generator.processProtoFile can load options etc
+        but defer the actual processing to the owner. '''
+    def __init__(self,knownTypes: list[str | None],
                  knownTypesByName: dict[str, str]):
         super().__init__(baseName="kmm-swift-conv")
-        self.packageName = packageName
-        self.namespace = namespace
-        self.options = options
         self.knownTypes = knownTypes
         self.knownTypesByName = knownTypesByName
-
 
 class ToSwiftGenerator(AuxGenerator):
     ''' A helper class which makes it possible for the main generator to make
@@ -97,8 +97,8 @@ class FromSwiftGenerator(AuxGenerator):
         if typeName.endswith("?"): typeName = typeName[:-1]
         indent = "    " * indentationLevel
         return [
-            indent + "func toData() -> %s%s {" % (self.prefix, typeName),
-            indent + "    return %s%s(" % (self.prefix, typeName)
+            indent + "func toData() -> %s%s {" % (prefix, typeName),
+            indent + "    return %s%s(" % (prefix, typeName)
         ]
     
     def messageClosing(self, msg: DescriptorProto,
@@ -165,26 +165,23 @@ class SwiftConvGenerator(Generator):
             "string": "String",
             "bytes": "[UInt8]"
         }
+        self.toSwift = ToSwiftGenerator(self.knownTypes,
+                                        self.knownTypesByName)
+        self.fromSwift = FromSwiftGenerator(self.knownTypes,
+                                            self.knownTypesByName)
     
     def getRole(self):
         return "Converter"
-    
-    def getContent(self, protoFile: FileDescriptorProto) -> str:
-        # toSwift and fromSwift need to be initialised with data read from
-        # protoFile, and this is a handy place to do it.
-        self.packageName = self.typeNameCase(protoFile.package)
-        self.namespace = self.getNamespace(protoFile)
-        self.toSwift = ToSwiftGenerator(self.packageName,
-                                        self.namespace,
-                                        self.options,
-                                        self.knownTypes,
-                                        self.knownTypesByName)
-        self.fromSwift = FromSwiftGenerator(self.packageName,
-                                            self.namespace,
-                                            self.options,
-                                            self.knownTypes,
-                                            self.knownTypesByName)
-        return super().getContent(protoFile)
+
+    def loadParameters(self, req: CodeGeneratorRequest):
+        super().loadParameters(req)
+        self.toSwift.parameters = self.parameters
+        self.fromSwift.parameters = self.parameters
+
+    def loadOptions(self, protoFile: FileDescriptorProto):
+        super().loadOptions(protoFile)
+        self.toSwift.loadOptions(protoFile)
+        self.fromSwift.loadOptions(protoFile)
 
     def processEnum(self, prefix: str, enum: EnumDescriptorProto,
                     indentationLevel: int) -> list[str]:
@@ -228,7 +225,7 @@ class SwiftConvGenerator(Generator):
 
     def processMessage(self, prefix: str, msg: DescriptorProto,
                        indentationLevel: int) -> list[str]:
-        lines = self.messageOpening(msg, msg.name, indentationLevel)
+        lines = self.messageOpening(prefix, msg, msg.name, indentationLevel)
         closing = self.messageClosing(msg, msg.name, indentationLevel)
         indentationLevel += 1
         return lines + \

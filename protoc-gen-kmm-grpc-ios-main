@@ -13,10 +13,8 @@ from google.protobuf.descriptor_pb2 import \
 from generator import Generator
 
 class AuxGenerator(Generator):
-    def __init__(self, namespace: str, options: dict[str, str],
-                 kmmPackage: str):
+    def __init__(self, options: dict[str, str], kmmPackage: str):
         super().__init__(baseName="kmm-grpc-ios-main")
-        self.namespace = namespace
         self.options = options
         self.kmmPackage = kmmPackage
 
@@ -75,13 +73,6 @@ class KMMGrpcIosDelegateGenerator(AuxGenerator):
 class KMMGrpcIosClientGenerator(AuxGenerator):
     ''' Generates the GrpcIosClient (Kotlin, implementing the shared interface).
     '''
-    def __init__(self, namespace: str, options: dict[str, str],
-                 kmmPackage: str):
-        super().__init__(baseName="kmm-grpc-ios-main")
-        self.namespace = namespace
-        self.options = options
-        self.kmmPackage = kmmPackage
-    
     def processMessagesAndEnums(self, protoFile: FileDescriptorProto,
                                 response: CodeGeneratorResponse):
         pass
@@ -143,22 +134,22 @@ class KMMGrpcIosMainGenerator(Generator):
     def __init__(self):
         super().__init__(baseName="kmm-grpc-ios-main")
     
-    def process(self, req: CodeGeneratorRequest) -> CodeGeneratorResponse:
-        response = super.process(req)
-        helperGenerator = KMMGrpcIosHelperGenerator(self.namespace, {},
-                                                    self.kmmPackage)
+    def processMessagesAndEnums(self, protoFile: FileDescriptorProto,
+                                response: CodeGeneratorResponse):
+        pass
+
+    def process(self, req: CodeGeneratorRequest,
+                response: CodeGeneratorResponse):
+        super().process(req, response)
+        helperGenerator = KMMGrpcIosHelperGenerator({}, self.kmmPackage)
         helperGenerator.addHelper(response)
-        return response
 
     def processFile(self, protoFile: FileDescriptorProto,
                     response: CodeGeneratorResponse):
-        self.options = self.getOptions(protoFile)
-        self.namespace = self.getNamespace(protoFile)
+        self.loadOptions(protoFile)
         for generator in (
-                KMMGrpcIosDelegateGenerator(self.namespace,
-                                            self.options, self.kmmPackage),
-                KMMGrpcIosClientGenerator(self.namespace,
-                                          self.options, self.kmmPackage),
+            KMMGrpcIosDelegateGenerator(self.options, self.kmmPackage),
+            KMMGrpcIosClientGenerator(self.options, self.kmmPackage),
         ):
             generator.processFile(protoFile, response)
     

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
-from google.protobuf.compiler.plugin_pb2 import CodeGeneratorResponse
+from google.protobuf.compiler.plugin_pb2 import \
+    CodeGeneratorRequest, CodeGeneratorResponse
 from google.protobuf.descriptor_pb2 import \
     FileDescriptorProto, \
     EnumDescriptorProto, DescriptorProto, \
@@ -8,20 +9,14 @@ from google.protobuf.descriptor_pb2 import \
 
 from generator import Generator
 
-class AuxGenerator(Generator):
-    def __init__(self, namespace: str, options: dict[str, str],
-                 javaPackage: str, kmmPackage: str):
-        super().__init__(baseName="kmm-jvm-conv")
-        self.namespace = namespace
-        self.options = options
-        self.javaPackage = javaPackage
-        self.kmmPackage = kmmPackage
-
 class ToJVMGenerator(Generator):
     ''' A helper class which makes it possible for the main generator to make
         two passes on each message using the super processMessage(); this
         handles the pass for converting the KMM data classes to their JVM
         implementations, using extensions on the data classes. '''
+    def __init__(self):
+        super().__init__(baseName="kmm-jvm-conv")
+
     def getDataHeader(self, protoFile: FileDescriptorProto) -> list[str]:
         return ["package " + self.javaPackage, ""]
     
@@ -66,24 +61,27 @@ class ToJVMGenerator(Generator):
                 (fieldName, fieldName, conv)]
 
 
-class FromJVMGenerator(AuxGenerator):
+class FromJVMGenerator(Generator):
     ''' A helper class which makes it possible for the main generator to make
         two passes on each message using the super processMessage(); this
         handles the pass for adding extensions to the JVM message classes to
         convert them to their KMM data counterparts. '''
+    def __init__(self):
+        super().__init__(baseName="kmm-jvm-conv")
+
     def getDataHeader(self, protoFile: FileDescriptorProto) -> list[str]:
         return ["package " + self.javaPackage, ""]
     
     def getRole(self):
         return "Converter"
     
-    def messageOpening(self, msg: DescriptorProto,
+    def messageOpening(self, prefix: str, msg: DescriptorProto,
                        name: str, indentationLevel: int) -> list[str]:
         typeName = self.typeNameCase(name)
         return [
-            "fun %s.toData(): %s.%s {" % (typeName, self.namespace, typeName),
+            "fun %s.toData(): %s.%s {" % (typeName, self.kmmPackage, typeName),
             "    val proto = this",
-            "    return %s.%s(" % (self.namespace, typeName)
+            "    return %s.%s(" % (self.kmmPackage, typeName)
         ]
     
     def messageClosing(self, msg: DescriptorProto,
@@ -116,7 +114,19 @@ class FromJVMGenerator(AuxGenerator):
 class JvmConvGenerator(Generator):
     def __init__(self):
         super().__init__(baseName="kmm-jvm-conv")
+        self.toJvm = ToJVMGenerator()
+        self.fromJvm = FromJVMGenerator()
     
+    def loadParameters(self, req: CodeGeneratorRequest):
+        super().loadParameters(req)
+        self.toJvm.parameters = self.parameters
+        self.fromJvm.parameters = self.parameters
+
+    def loadOptions(self, protoFile: FileDescriptorProto):
+        super().loadOptions(protoFile)
+        self.toJvm.loadOptions(protoFile)
+        self.fromJvm.loadOptions(protoFile)
+
     def getDataHeader(self, protoFile: FileDescriptorProto) -> list[str]:
         return ["package " + self.javaPackage, ""]
     
@@ -130,7 +140,7 @@ class JvmConvGenerator(Generator):
                                         self.javaPackage, self.kmmPackage)
         return super().getContent(protoFile)
 
-    def processEnum(self, enum: EnumDescriptorProto,
+    def processEnum(self, prefix: str, enum: EnumDescriptorProto,
                     indentationLevel: int) -> list[str]:
         typeName = self.convertTypeName(enum.name)
         dataType = "%s.%s" % (self.kmmPackage, typeName)
@@ -149,10 +159,11 @@ class JvmConvGenerator(Generator):
                         response: CodeGeneratorResponse):
         pass
 
-    def processMessage(self, msg: DescriptorProto,
+    def processMessage(self, prefix: str, msg: DescriptorProto,
                        indentationLevel: int) -> list[str]:
-        return self.fromJvm.processMessage(msg, indentationLevel) + [""] + \
-            self.toJvm.processMessage(msg, indentationLevel)
+        return self.fromJvm.processMessage(prefix, msg,
+            indentationLevel) + [""] + \
+            self.toJvm.processMessage(prefix, msg, indentationLevel)
 
 
 def main():

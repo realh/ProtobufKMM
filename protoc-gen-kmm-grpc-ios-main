@@ -71,6 +71,10 @@ class KMMGrpcIosDelegateGenerator(AuxGenerator):
 class KMMGrpcIosClientGenerator(AuxGenerator):
     ''' Generates the GrpcIosClient (Kotlin, implementing the shared interface).
     '''
+    def __init__(self):
+        super().__init__()
+        self.collapseSignatures = False
+
     def processMessagesAndEnums(self, protoFile: FileDescriptorProto,
                                 response: CodeGeneratorResponse):
         pass
@@ -112,7 +116,7 @@ class KMMGrpcIosClientGenerator(AuxGenerator):
                                         serv,
                                         method,
                                         withCallbacks=False)
-        lines[0] = "    override " + lines[0][4:]
+        lines[0] = "override " + lines[0][4:]
         lines[-1] += " = "
         methodName = self.memberCase(method.name)
         if method.client_streaming and method.server_streaming:
@@ -127,6 +131,8 @@ class KMMGrpcIosClientGenerator(AuxGenerator):
         else:
             lines[-1] += "unaryCall {"
             body = "delegate.%s(request, it)"
+        lines = self.collapseIfNotTooLong(lines)
+        lines[0] = "    " + lines[0]
         lines.append("        " + body % methodName)
         lines.extend(["    }", ""])
         return lines

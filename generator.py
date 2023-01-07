@@ -48,6 +48,9 @@ class Generator:
             "string": "String",
             "bytes": "ByteArray"
         }
+        # Set to False in a subclass if you want function signatures to use
+        # multiline formatting
+        self.collapseSignatures = True
 
     def runOnStdinAndStdout(self):
         ''' This can be used as the entry point to load the
@@ -321,7 +324,9 @@ class Generator:
                            serv: ServiceDescriptorProto,
                            method: MethodDescriptorProto,
                            withCallbacks = False) -> list[str]:
-        ''' Gets a method signature (without opening brace). '''
+        ''' Gets a method signature (without opening brace). If
+            self.collapseSignatures is True, calls collapseIfNotTooLong on the
+            result. '''
         if self.swift:
             withCallbacks = True
         # Server streaming methods don't need to be suspending
@@ -350,7 +355,18 @@ class Generator:
         ]
         lines.extend(arg)
         lines.extend(ret)
+        if self.collapseSignatures:
+            lines = self.collapseIfNotTooLong(lines)
         return ["    " + l for l in lines]
+    
+    def collapseIfNotTooLong(self, lines: list[str]) -> list[str]:
+        ''' Collapse a function signature on to one line, but if the line is
+            longer than 74 characters (excluding indentation and opening brace)
+            use multiline formatting. '''
+        collapsed = "".join([l.strip() for l in lines])
+        if len(collapsed) <= 74:
+            lines = [collapsed]
+        return lines
     
     def convertClientStreamingInput(self, typeName: str) -> str:
         ''' Converts the type of a request input to a client streaming version.

@@ -9,37 +9,73 @@ from google.protobuf.descriptor_pb2 import \
 
 from generator import Generator
 
-class ToJVMGenerator(Generator):
-    ''' A helper class which makes it possible for the main generator to make
-        two passes on each message using the super processMessage(); this
-        handles the pass for converting the KMM data classes to their JVM
-        implementations, using extensions on the data classes. '''
+class JvmConvGenerator(Generator):
     def __init__(self):
         super().__init__(baseName="kmm-jvm-conv")
-
+        self.orNulls: set[str] = set()
+    
     def getDataHeader(self, protoFile: FileDescriptorProto) -> list[str]:
-        return ["package " + self.javaPackage, ""]
+        return ["package " + self.kmmPackage, ""]
     
-    def messageOpening(self, prefix: str,
-                       msg: DescriptorProto,
-                       name: str,
-                       indentationLevel: int) -> list[str]:
-        typeName = self.convertTypeName(msg.name)
-        camelName = self.memberCase(name)   # DSL builder
-        return [
-            "fun %s.%s.toProto(): %s {" % \
-                    (self.kmmPackage, typeName, typeName),
-            "    val data = this",
-            "    return %s {" % camelName,
+    def processEnum(self, prefix: str, enum: EnumDescriptorProto,
+                    indentationLevel: int) -> list[str]:
+        typeName = self.convertTypeName(enum.name)
+        kmmType = typeName
+        jvmType = "%s.%s" % (self.javaPackage, typeName)
+        lines = [
+            "fun %s.toProto(): %s {" % (kmmType, jvmType),
+            "    return %s.forNumber(this.value)" % jvmType,
+            "}",
+            "",
+            "fun %s.Companion.fromProto(" % kmmType,
+            "    proto: %s" % jvmType,
+            "): %s {" % kmmType,
+            "    return %s from proto.number" % kmmType,
+            "}",
+            "",
         ]
-    
-    def messageClosing(self, msg: DescriptorProto,
-                       name: str, indentationLevel: int) -> list[str]:
-        return ["    }", "}"]
+        return lines
 
-    def processField(self, msg: DescriptorProto,
-                     field: FieldDescriptorProto,
-                     indentationLevel: int) -> list[str]:
+    def processMessage(self, prefix: str,
+                       msg: DescriptorProto,
+                       indentationLevel: int) -> list[str]:
+        self.orNulls: set[str] = set()
+        typeName = self.typeNameCase(msg.name)
+        if typeName.endswith("?"):
+            typeName = typeName[:-1]
+        kmmType = "%s" % typeName
+        jvmType = "%s.%s" % (self.javaPackage, typeName)
+        dslName = "%s.%s" % (self.javaPackage, self.memberCase(typeName))
+        lines = [
+            "fun %s.toProto(): %s {" % (kmmType, jvmType),
+            "    val data = this",
+            "    return %s {" % dslName,
+        ]
+        for field in msg.field:
+            lines.extend(self.processFieldToJvm(msg, field))
+        lines.extend([
+            "    }",
+            "}",
+            "",
+            "fun %s.Companion.fromProto(" % kmmType,
+            "    proto: %s" % jvmType,
+            ") = %s(" % kmmType,
+        ])
+        for field in msg.field:
+            lines.extend(self.processFieldFromJvm(msg, field))
+        lines.extend([
+            ")",
+            "",
+        ])
+        if len(self.orNulls) > 0:
+            lines = [
+                "import %s.%sOrNull" % (self.javaPackage, f)
+                for f in self.orNulls
+            ] + [""] + lines
+        return lines
+
+    def processFieldToJvm(self, msg: DescriptorProto,
+                          field: FieldDescriptorProto) -> list[str]:
         fieldName = self.memberCase(field.name)
         typeName = self.getTypeName(field.type, field.type_name)
         builtIn = self.typeIsBuiltIn(field.type, field.type_name)
@@ -60,110 +96,36 @@ class ToJVMGenerator(Generator):
             return ["        this.%s = data.%s%s" % \
                 (fieldName, fieldName, conv)]
 
-
-class FromJVMGenerator(Generator):
-    ''' A helper class which makes it possible for the main generator to make
-        two passes on each message using the super processMessage(); this
-        handles the pass for adding extensions to the JVM message classes to
-        convert them to their KMM data counterparts. '''
-    def __init__(self):
-        super().__init__(baseName="kmm-jvm-conv")
-
-    def getDataHeader(self, protoFile: FileDescriptorProto) -> list[str]:
-        return ["package " + self.javaPackage, ""]
-    
-    def getRole(self):
-        return "Converter"
-    
-    def messageOpening(self, prefix: str, msg: DescriptorProto,
-                       name: str, indentationLevel: int) -> list[str]:
-        typeName = self.typeNameCase(name)
-        return [
-            "fun %s.toData(): %s.%s {" % (typeName, self.kmmPackage, typeName),
-            "    val proto = this",
-            "    return %s.%s(" % (self.kmmPackage, typeName)
-        ]
-    
-    def messageClosing(self, msg: DescriptorProto,
-                       name: str, indentationLevel: int) -> list[str]:
-        return ["    )", "}"]
-
-    def processField(self, msg: DescriptorProto,
-                     field: FieldDescriptorProto,
-                     indentationLevel: int) -> list[str]:
+    def processFieldFromJvm(self, msg: DescriptorProto,
+                     field: FieldDescriptorProto) -> list[str]:
         fieldName = self.memberCase(field.name)
         typeName = self.getTypeName(field.type, field.type_name)
         if typeName.endswith("?"):
             typeName = typeName[:-1]
-            optional = "OrNull?"
+            optional = True
+            self.orNulls.add(fieldName)
         else:
-            optional = ""
+            optional = False
+        kmmType = "%s" % typeName
         builtIn = self.typeIsBuiltIn(field.type, field.type_name)
         isList = field.label == FieldDescriptorProto.LABEL_REPEATED
         if isList and not builtIn:
-            expr = "proto.%sList.map { it.toData() }" % fieldName
+            expr = "proto.%sList.map { %s.fromProto(it) }" % \
+                (fieldName, kmmType)
         elif isList and builtIn:
             expr = "proto.%sList" % fieldName
         elif builtIn:
             expr = "proto.%s" % fieldName
+        elif optional:
+            expr = "proto.%sOrNull?.let { %s.fromProto(it) }" % \
+                (fieldName, kmmType)
         else:
-            expr = "proto.%s%s.toData()" % (fieldName, optional)
-        return ["        %s = %s," % (fieldName, expr)]
-
-
-class JvmConvGenerator(Generator):
-    def __init__(self):
-        super().__init__(baseName="kmm-jvm-conv")
-        self.toJvm = ToJVMGenerator()
-        self.fromJvm = FromJVMGenerator()
-    
-    def loadParameters(self, req: CodeGeneratorRequest):
-        super().loadParameters(req)
-        self.toJvm.parameters = self.parameters
-        self.fromJvm.parameters = self.parameters
-
-    def loadOptions(self, protoFile: FileDescriptorProto):
-        super().loadOptions(protoFile)
-        self.toJvm.loadOptions(protoFile)
-        self.fromJvm.loadOptions(protoFile)
-
-    def getDataHeader(self, protoFile: FileDescriptorProto) -> list[str]:
-        return ["package " + self.javaPackage, ""]
-    
-    def getContent(self, protoFile: FileDescriptorProto) -> str:
-        # toJvm and fromJvm need to be initialised with data read from
-        # protoFile, and this is a handy place to do it.
-        self.namespace = self.getNamespace(protoFile)
-        self.toJvm = ToJVMGenerator(self.namespace, self.options,
-                                    self.javaPackage, self.kmmPackage)
-        self.fromJvm = FromJVMGenerator(self.namespace, self.options,
-                                        self.javaPackage, self.kmmPackage)
-        return super().getContent(protoFile)
-
-    def processEnum(self, prefix: str, enum: EnumDescriptorProto,
-                    indentationLevel: int) -> list[str]:
-        typeName = self.convertTypeName(enum.name)
-        dataType = "%s.%s" % (self.kmmPackage, typeName)
-        lines = [
-            "fun %s.toData(): %s {" % (typeName, dataType),
-            "    return %s from number" % dataType,
-            "}",
-            "",
-            "fun %s.toProto(): %s {" % (dataType, typeName),
-            "    return %s.forNumber(this.value)" % typeName,
-            "}"
-        ]
-        return lines
+            expr = "%s.fromProto(proto.%s)" % (kmmType, fieldName)
+        return ["    %s = %s," % (fieldName, expr)]
 
     def processServices(self, protoFile: FileDescriptorProto,
                         response: CodeGeneratorResponse):
         pass
-
-    def processMessage(self, prefix: str, msg: DescriptorProto,
-                       indentationLevel: int) -> list[str]:
-        return self.fromJvm.processMessage(prefix, msg,
-            indentationLevel) + [""] + \
-            self.toJvm.processMessage(prefix, msg, indentationLevel)
 
 
 def main():

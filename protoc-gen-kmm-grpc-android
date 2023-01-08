@@ -26,8 +26,6 @@ class KMMGrpcAndroidGenerator(Generator):
             # an easy fix if not.
             "import %s.%sGrpcKt.%sCoroutineStub" % \
                 (self.javaPackage, serv.name, serv.name),
-            "import %s.toData" % self.javaPackage,
-            "import %s.toProto" % self.javaPackage,
             ""
         ])
         return lines
@@ -52,19 +50,20 @@ class KMMGrpcAndroidGenerator(Generator):
         lines[0] = indent + "override " + lines[0][4:]
         lines[-1] += " ="
         methodName = self.memberCase(method.name)
+        resType = self.convertTypeName(method.output_type)
+        if resType.endswith("?"):
+            resType = resType[:-1]
         if method.client_streaming:
             input = "map { it.toProto() }"
         else:
             input = "toProto()"
         if method.server_streaming:
-            output = "map { it.toData() }"
+            output = "stub.%s(request.%s).map { %s.fromProto(it) }" % \
+                (methodName, input, resType)
         else:
-            output = "toData()"
-        lines.extend([
-            indent + "    stub.%s(request.%s).%s" % \
-                (methodName, input, output),
-            ""
-        ])
+            output = "%s.fromProto(stub.%s(request.%s))" % \
+                (resType, methodName, input)
+        lines.extend([indent + "    " + output, ""])
         return lines
 
     def getClientVariety(self):

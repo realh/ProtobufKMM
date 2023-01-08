@@ -98,17 +98,19 @@ class JvmConvGenerator(Generator):
 
     def processFieldFromJvm(self, msg: DescriptorProto,
                      field: FieldDescriptorProto) -> list[str]:
+        isList = field.label == FieldDescriptorProto.LABEL_REPEATED
         fieldName = self.memberCase(field.name)
         typeName = self.getTypeName(field.type, field.type_name)
-        if typeName.endswith("?"):
+        if typeName.endswith("?") and not isList:
             typeName = typeName[:-1]
             optional = True
             self.orNulls.add(fieldName)
         else:
             optional = False
+        if typeName.endswith("?"):
+            typeName = typeName[:-1]
         kmmType = "%s" % typeName
         builtIn = self.typeIsBuiltIn(field.type, field.type_name)
-        isList = field.label == FieldDescriptorProto.LABEL_REPEATED
         if isList and not builtIn:
             expr = "proto.%sList.map { %s.fromProto(it) }" % \
                 (fieldName, kmmType)

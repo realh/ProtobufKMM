@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+import re
+
 from google.protobuf.compiler.plugin_pb2 import \
     CodeGeneratorRequest, CodeGeneratorResponse
 from google.protobuf.descriptor_pb2 import \
@@ -35,6 +37,9 @@ class KMMGrpcSwiftGenerator(Generator):
             self.typeNameCase(serv.name))
         clientType = clientPrefix + "ClientProtocol"
         lines = super().getServiceHeader(protoFile, serv)
+        classDef = lines[-1][:-2]
+        protoName = re.sub(r"\b.*_(.*)\b", r"\1", classDef)
+        lines[-1] = classDef + ": %s {" % protoName
         return lines + [
             "    private let client: %s" % clientType,
             "",
@@ -43,7 +48,7 @@ class KMMGrpcSwiftGenerator(Generator):
             "    }",
             "",
         ]
-
+    
     def getServiceMethod(self, protoFile: FileDescriptorProto,
                         serv: ServiceDescriptorProto,
                         method: MethodDescriptorProto) -> list[str]:

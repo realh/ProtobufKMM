@@ -39,6 +39,7 @@ class JvmConvGenerator(Generator):
     def processMessage(self, prefix: str,
                        msg: DescriptorProto,
                        indentationLevel: int) -> list[str]:
+        self.importByteString = False
         self.orNulls: set[str] = set()
         typeName = self.typeNameCase(msg.name)
         if typeName.endswith("?"):
@@ -67,11 +68,16 @@ class JvmConvGenerator(Generator):
             ")",
             "",
         ])
+        imports = []
+        if self.importByteString:
+            imports = ["import com.google.protobuf.ByteString"]
         if len(self.orNulls) > 0:
-            lines = [
+            imports = imports + [
                 "import %s.%sOrNull" % (self.javaPackage, f)
                 for f in self.orNulls
-            ] + [""] + lines
+            ]
+        if len(imports) > 0:
+            lines = imports + [""] + lines
         return lines
 
     def processFieldToJvm(self, msg: DescriptorProto,
@@ -92,6 +98,10 @@ class JvmConvGenerator(Generator):
         elif not isList and typeName.endswith("?"):
             return ["        data.%s?.let { this.%s = it%s }" % \
                 (fieldName, fieldName, conv)]
+        elif typeName == "ByteArray":
+            self.importByteString = True
+            return ["        this.%s = ByteString.copyFrom(data.%s)" % \
+                    (fieldName, fieldName)]
         else:
             return ["        this.%s = data.%s%s" % \
                 (fieldName, fieldName, conv)]
@@ -116,6 +126,8 @@ class JvmConvGenerator(Generator):
                 (fieldName, kmmType)
         elif isList and builtIn:
             expr = "proto.%sList" % fieldName
+        elif typeName == "ByteArray":
+            expr = "proto.%s.toByteArray()" % fieldName
         elif builtIn:
             expr = "proto.%s" % fieldName
         elif optional:

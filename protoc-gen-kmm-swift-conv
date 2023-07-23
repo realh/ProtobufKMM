@@ -65,6 +65,8 @@ class ToSwiftGenerator(AuxGenerator):
         if isList and not builtIn:
             conv = "data.%s.map { %s.from(data: $0) }" % \
                 (ktFieldName, swiftName)
+        elif typeName == "Data":
+            conv = "data.%s.toNSData()" % ktFieldName
         elif builtIn:
             conv = "data.%s" % ktFieldName
             if typeName.startswith("U"):
@@ -124,6 +126,8 @@ class FromSwiftGenerator(AuxGenerator):
         isList = field.label == FieldDescriptorProto.LABEL_REPEATED
         if isList and not builtIn:
             expr = "%s.map { $0.toData() }" % swFieldName
+        elif typeName == "Data":
+            expr = "%s.toKotlinByteArray()" % swFieldName
         elif optional:
             expr = "%s ? %s.toData() : nil" % (has, swFieldName)
         elif builtIn:
@@ -145,7 +149,7 @@ class SwiftConvGenerator(Generator):
             "Int64", "Int32", "Bool", "String",
             None, # Group
             None, # Message
-            "[UInt8]", "UInt32",
+            "Data", "UInt32",
             None, # Enum
             "Int32", "Int64",
             "Int32", "Int64"
@@ -165,7 +169,7 @@ class SwiftConvGenerator(Generator):
             "sfixed64": "Int64",
             "bool": "Bool",
             "string": "String",
-            "bytes": "[UInt8]"
+            "bytes": "Data"
         }
         self.toSwift = ToSwiftGenerator(self.knownTypes,
                                         self.knownTypesByName)

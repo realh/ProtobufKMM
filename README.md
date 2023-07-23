@@ -66,6 +66,40 @@ their Swift counterparts.
 
 The output filename is `ProtoPackageConverters.swift`.
 
+If the proto file includes messages with `bytes` fields, you will have to
+provide some helper functions. In Kotlin in your iOS module:
+
+```kotlin
+fun ByteArray.toNSData(): NSData = memScoped {
+    val byteArray = this@toNSData
+    NSData.create(
+        bytes = allocArrayOf(byteArray),
+        length = byteArray.size.toULong()
+    )
+}
+
+fun NSDataToKotlinByteArray(nsData: NSData): ByteArray {
+    val size = nsData.length
+    return ByteArray(size = size.toInt()).apply {
+        usePinned {
+            memcpy(it.addressOf(0), nsData.bytes, size)
+        }
+    }
+}
+```
+
+In Swift:
+```
+extension Data {
+    func toKotlinByteArray() -> KotlinByteArray {
+        ByteArrayToAndFromDataKt.NSDataToKotlinByteArray(nsData: self)
+    }
+}
+
+```
+Replace `ByteArrayToAndFromData` with the name of the source file where you
+saved the above Kotlin functions. Note the `Kt` suffix.
+
 ### protoc-gen-kmm-grpc-shared
 
 Generates an interface for each service in the shared module which encapsulates

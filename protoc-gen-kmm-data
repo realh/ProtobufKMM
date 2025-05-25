@@ -58,7 +58,7 @@ class KtDataGenerator(Generator):
         indent = "    " * indentationLevel
         return [
             indent + ") {",
-            indent + "    companion object {}",
+            indent + "    companion object",
             indent + "}"
         ]
 

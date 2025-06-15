@@ -63,7 +63,7 @@ class Generator:
         self.process(req, response)
         output = response.SerializeToString()
         sys.stdout.buffer.write(output)
-    
+
     def process(self, req: CodeGeneratorRequest,
                 response: CodeGeneratorResponse):
         ''' Processes a CodeGeneratorRequest and adds to a
@@ -75,7 +75,7 @@ class Generator:
         self.loadParameters(req)
         for f in req.proto_file:
             self.processProtoFile(f, response)
-    
+
     def loadParameters(self, req: CodeGeneratorRequest):
         ''' Loads parameters from a request. '''
         if len(req.parameter) > 0:
@@ -83,8 +83,11 @@ class Generator:
             self.parameters = { p[0]: p[1] for p in parameters }
         else:
             self.parameters = {}
-        self.sharedModule = self.parameters.get("shared_module", "shared")
-    
+        swiftImports = self.parameters.get("swift_imports", None)
+        if swiftImports is None:
+            swiftImports = self.parameters.get("shared_module", "shared")
+        self.swiftImports = swiftImports
+
     def processProtoFile(self, protoFile: FileDescriptorProto,
                          response: CodeGeneratorResponse):
         ''' Processes each proto file, adding a new set of output files to the
@@ -93,7 +96,7 @@ class Generator:
         self.loadOptions(protoFile)
         self.processMessagesAndEnums(protoFile, response)
         self.processServices(protoFile, response)
-    
+
     def loadOptions(self, protoFile: FileDescriptorProto):
         ''' Assigns self.options etc read from protoFile . '''
         self.packageName = self.typeNameCase(protoFile.package)
@@ -120,7 +123,7 @@ class Generator:
             return "%s_%s.swift" % (protoName, className)
         else:
             return "%s.kt" % className
-    
+
     def getRole(self):
         ''' Return "Data" or "", "Converter" etc depending on which are being
             generated: message/enum definitions or converters. '''
@@ -134,7 +137,7 @@ class Generator:
         file = response.file.add()
         file.name = self.getOutputFilenameForClass(protoName, className)
         file.content = "\n".join(content)
-    
+
     def processMessagesAndEnums(self, protoFile: FileDescriptorProto,
                                 response: CodeGeneratorResponse):
         ''' Processes messages and enums in protoFile. In Swift there is
@@ -142,6 +145,8 @@ class Generator:
         protoName = self.packageName
         if self.swift:
             content = self.getDataHeader(protoFile)
+        else:
+            content = []
         indentationLevel = 0
         for enum in protoFile.enum_type:
             if not self.swift:
@@ -193,18 +198,21 @@ class Generator:
                 self.typeNameCase(serv.name) + "Grpc" + self.getClientVariety(),
                 response,
                 content)
-    
+
     def getDataHeader(self, protoFile: FileDescriptorProto) -> list[str]:
         ''' Gets the first few lines to start a file containing one or many
             messages/enums. '''
         if self.swift:
-            return [
-                "import " + str(self.sharedModule),
-                "",
-            ]
+            return self.getSwiftImports()
         else:
             return ["package " + self.kmmPackage, ""]
-    
+
+    def getSwiftImports(self) -> list[str]:
+        if self.swiftImports == "":
+            return []
+        imports = ["import " + i for i in self.swiftImports.split(':')]
+        return imports + [""]
+
     def getServiceImports(self, protoFile: FileDescriptorProto,
                           serv: ServiceDescriptorProto) -> list[str]:
         lines = self.getDataHeader(protoFile)
@@ -214,12 +222,12 @@ class Generator:
                 "import GRPC",
             ] + lines
         return lines
-    
+
     def getDataFooter(self, protoFile: FileDescriptorProto) -> list[str]:
         ''' Gets the last few lines to add to the end of  a file containing one
             or many messages/enums.. '''
         return []
-    
+
     def processEnum(self, prefix: str,
                     enum: EnumDescriptorProto,
                     indentationLevel: int) -> list[str]:
@@ -229,7 +237,7 @@ class Generator:
             followed by parent messages when nested. '''
         raise NotImplementedError("processEnum not overridden in %s",
                 self.baseName)
-    
+
     def processMessage(self, prefix: str,
                        msg: DescriptorProto,
                        indentationLevel: int) -> list[str]:
@@ -259,14 +267,14 @@ class Generator:
         indentationLevel -= 1
         lines.extend(self.messageClosing(msg, name, indentationLevel))
         return lines
-    
+
     def processField(self, msg: DescriptorProto,
                      field: FieldDescriptorProto,
                      indentationLevel: int) -> list[str]:
         ''' Processes a field of a message. '''
         raise NotImplementedError("processField not overridden in %s",
                 self.baseName)
-    
+
     def processService(self, protoFile: FileDescriptorProto,
                        serv: ServiceDescriptorProto) -> list[str]:
         ''' Processes a grpc service. '''
@@ -290,11 +298,11 @@ class Generator:
             self.getServiceOpenBracket(),
         ))
         return lines
-    
+
     def getServiceEntity(self):
         ''' "class", "interface" etc for a service definition. '''
         return "class"
-    
+
     def getServiceName(self, protoFile: FileDescriptorProto,
                        serv: ServiceDescriptorProto) -> str:
         ''' Gets the name of a service, which is qualified with the proto
@@ -358,7 +366,7 @@ class Generator:
         if self.collapseSignatures:
             lines = self.collapseIfNotTooLong(lines)
         return ["    " + l for l in lines]
-    
+
     def collapseIfNotTooLong(self, lines: list[str]) -> list[str]:
         ''' Collapse a function signature on to one line, but if the line is
             longer than 74 characters (excluding indentation and opening brace)
@@ -367,12 +375,12 @@ class Generator:
         if len(collapsed) <= 74:
             lines = [collapsed]
         return lines
-    
+
     def convertClientStreamingInput(self, typeName: str) -> str:
         ''' Converts the type of a request input to a client streaming version.
             N/A in swift. '''
         return "Flow<%s>" % typeName
-    
+
     def getReturn(self, protoFile: FileDescriptorProto,
                   method: MethodDescriptorProto) -> list[str]:
         ''' Gets a return clause for a method: the closing brace and return
@@ -388,7 +396,7 @@ class Generator:
         if method.server_streaming:
             typeName = "Flow<%s>" % typeName
         return [ "", ")" + self.getReturnSymbol() + typeName]
-    
+
     def getResultCallbackInLieuOfReturn(self, protoFile: FileDescriptorProto,
                   method: MethodDescriptorProto) -> list[str]:
         ''' For methods using callbacks, gets the final parameter used to
@@ -410,12 +418,12 @@ class Generator:
         return ["result: %s(%s, String?)%s" % \
                 (escaping, typeName, self.getReturnVoid())
         ]
-    
+
     def getFuncKeyword(self) -> str:
         ''' Gets the keyword for a function in the target language, including
             a trailing space. '''
         return "func " if self.swift else "fun "
-    
+
     def getReturnSymbol(self) -> str:
         ''' Including any spaces. ": " for Kotlin, use " -> " for Swift. '''
         return " -> " if self.swift else ": "
@@ -431,9 +439,10 @@ class Generator:
     def getSuspendKeyword(self) -> str:
         ''' This is only useful for Kotlin, Swift should return "". '''
         return "" if self.swift else "suspend "
-    
+
     def getTypeName(self, number: int, typeName: str | None) -> str:
         ''' Gets the typename in the target language (here, Kotlin). '''
+        typeName = typeName or "Any"
         if number == FieldDescriptorProto.TYPE_MESSAGE:
             return self.convertTypeName(typeName) + "?"
         elif number == FieldDescriptorProto.TYPE_ENUM:
@@ -442,13 +451,13 @@ class Generator:
             n = self.getBuiltInTypeByNumber(number)
             if n is not None:
                 return n
-        if typeName is None:
+        if typeName == "Any":
             return "Any?"
         n = self.getBuiltInTypeByName(typeName)
         if n is not None:
             return n
         return self.convertTypeName(typeName) + "?"
-    
+
     def typeIsBuiltIn(self, number: int, typeName: str | None) -> bool:
         ''' Works out whether the type of a field is built-in/primitive. '''
         if number == FieldDescriptorProto.TYPE_MESSAGE:
@@ -466,16 +475,16 @@ class Generator:
         if n is not None:
             return True
         return False
-    
+
     def convertTypeName(self, name: str) -> str:
         ''' Strips any leading qualifier (includes aren't currently supported),
             applies self.typeNameCase. '''
         if name.startswith("."):
-            name = name.split(".")
+            names = name.split(".")
             if self.swift:
                 # @ObjCName is a fabrication, so Swift/ObjC names have to be
                 # the same as Kotlin.
-                name = "".join(name[2:])
+                name = "".join(names[2:])
                 '''
                 prefix = name[1]
                 name = "".join(name[2:])
@@ -492,13 +501,13 @@ class Generator:
         if number >= len(self.knownTypes):
             return None
         return self.knownTypes[number]
-    
+
     def getBuiltInTypeByName(self, name: str) -> str | None:
         ''' Looks up a built-in type by its FieldDescriptorProto.type_name,
             using self.knownTypesByName, which can be replaced in a sub-class'
             constructor if not Kotlin. '''
-        return self.knownTypesByName(name)
-    
+        return self.knownTypesByName.get(name)
+
     def messageOpening(self, prefix: str,
                        msg: DescriptorProto,
                        name: str,
@@ -569,11 +578,11 @@ class Generator:
             return "GrpcIosClientHelperClientStreamer"
         else:
             return "GrpcIosClientHelper.ClientStreamer<%s>" % typeName
-    
-    def getClientVariety(self):
+
+    def getClientVariety(self) -> str:
         ''' "AndroidClient", "IosDelegate" etc. '''
         return "Client"
-    
+
     def getServiceOpenBracket(self):
         ''' "(" or "{" depending on whether the class has constructor
             parameters.'''

@@ -14,7 +14,7 @@ class KMMGrpcSwiftGenerator(Generator):
     def __init__(self):
         super().__init__(baseName="kmm-grpc-swift", swift=True)
         self.helperGenerator = KMMGrpcClientStreamerGenerator()
-    
+
     def process(self, req: CodeGeneratorRequest,
                 response: CodeGeneratorResponse):
         super().process(req, response)
@@ -25,12 +25,12 @@ class KMMGrpcSwiftGenerator(Generator):
                                 response: CodeGeneratorResponse):
         pass
 
-    def getClientVariety(self):
+    def getClientVariety(self) -> str:
         return "IosDelegate"
-    
+
     def getFooter(self, protoFile: FileDescriptorProto) -> list[str]:
         return [""]
-    
+
     def getServiceHeader(self, protoFile: FileDescriptorProto,
                          serv: ServiceDescriptorProto) -> list[str]:
         clientPrefix = "%s_%s" % (self.typeNameCase(protoFile.package),
@@ -48,7 +48,7 @@ class KMMGrpcSwiftGenerator(Generator):
             "    }",
             "",
         ]
-    
+
     def getServiceMethod(self, protoFile: FileDescriptorProto,
                         serv: ServiceDescriptorProto,
                         method: MethodDescriptorProto) -> list[str]:
@@ -104,10 +104,10 @@ class KMMGrpcClientStreamerGenerator(Generator):
     ''' Generates GrpcClientStreamer.swift by copying streamerCode. '''
     def __init__(self):
         super().__init__(baseName="kmm-grpc-swift", swift=True)
-    
+
     def addHelper(self, response: CodeGeneratorResponse):
         lines = streamerCode.split("\n")
-        lines = ["import " + self.sharedModule] + lines
+        lines = self.getSwiftImports() + lines
         self.addResponseFile("", "", response, lines)
         return response
 
@@ -115,33 +115,33 @@ class KMMGrpcClientStreamerGenerator(Generator):
                                   className: str) -> str:
         return "GrpcClientStreamer.swift"
 
-    def getClientVariety(self):
+    def getClientVariety(self) -> str:
         return "ClientStreamer"
-    
+
 
 streamerCode = '''import GRPC
 
 class GrpcClientStreamer<T, R>: GrpcIosClientHelperClientStreamer {
     let call: ClientStreamingCall<T, R>
     let converter: (Any?)->T?
-    
+
     init(_ call: ClientStreamingCall<T, R>, converter: @escaping (Any)->T?) {
         self.call = call
         self.converter = converter
     }
-    
+
     func send(message: Any?) {
         let msg = converter(message)
         guard let msg = msg else { return }
         _ = call.sendMessage(msg)
     }
-    
+
     func finish() {
         _ = call.sendEnd()
     }
 }
 '''
-    
+
 
 def main():
     generator = KMMGrpcSwiftGenerator()

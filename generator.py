@@ -491,7 +491,7 @@ class Generator:
                 return self.typeNameCase(prefix) + self.typeNameCase(name)
                 '''
             else:
-                name = ".".join(name[2:])
+                name = ".".join(names[2:])
         return self.typeNameCase(name)
 
     def getBuiltInTypeByNumber(self, number: int) -> str | None:
